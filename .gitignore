@@ -7,7 +7,7 @@ visitors.csv
 attendance.csv
 last_seen.json
 report_state.json
-reports/
+/reports/
 logs/
 backup_*/
 _webcam.jpg

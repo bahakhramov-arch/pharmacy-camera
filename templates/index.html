@@ -293,6 +293,9 @@
         <p><span class="pulse" id="pulse"></span><span id="updated">загрузка…</span></p>
       </div>
     </div>
+    <button class="btn icon" id="appSettings" title="Адрес сервера" aria-label="Настройки приложения" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
     <button class="btn icon" id="themeBtn" title="Светлая / тёмная тема" aria-label="Сменить тему">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
     </button>
@@ -770,6 +773,12 @@
     if (state.data) render(state.data);
   });
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => state.data && render(state.data), 150); });
+
+  // приложение «5+ Отчёты» для Android: шестерёнка открывает смену адреса сервера
+  if (window.Android5plus) {
+    $("appSettings").hidden = false;
+    $("appSettings").addEventListener("click", () => window.Android5plus.openSettings());
+  }
 
   // ---------- старт ----------
   document.documentElement.dataset.theme = store.get("theme") === "light" ? "light" : "dark"; // по умолчанию тёмная

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page">#0A090E</color>
+    <color name="surface">#15131D</color>
+    <color name="surface2">#1F1C2B</color>
+    <color name="ink">#F2F0F7</color>
+    <color name="ink2">#C4BFD3</color>
+    <color name="muted">#8C87A0</color>
+    <color name="accent">#8B6CF6</color>
+    <color name="crit">#E05555</color>
+    <color name="logo_red">#F90706</color>
+
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/page</item>
+        <item name="android:colorBackground">@color/page</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorPrimary">@color/page</item>
+        <item name="android:colorPrimaryDark">@color/page</item>
+        <item name="android:statusBarColor">@color/page</item>
+        <item name="android:navigationBarColor">@color/page</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+    </style>
+</resources>

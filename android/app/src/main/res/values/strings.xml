@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">5+ Отчёты</string>
+    <string name="setup_title">Аптека 5+</string>
+    <string name="setup_text">Введите адрес компьютера, на котором работает программа учёта. Его пишет бот в Telegram при запуске («в сети: http://…»).</string>
+    <string name="setup_hint">например 192.168.1.15:8080</string>
+    <string name="connect">Подключиться</string>
+    <string name="checking">Проверяю связь…</string>
+    <string name="error_title">Нет связи с аптекой</string>
+    <string name="error_text">Телефон должен быть в Wi-Fi аптеки, а программа учёта — запущена на компьютере.</string>
+    <string name="retry">Повторить</string>
+    <string name="change_address">Изменить адрес</string>
+</resources>

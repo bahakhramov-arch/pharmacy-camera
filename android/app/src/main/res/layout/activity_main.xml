@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/page">
+
+    <WebView
+        android:id="@+id/web"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="@android:style/Widget.Material.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/accent"
+        android:visibility="gone" />
+
+    <!-- Первый запуск / смена адреса -->
+    <ScrollView
+        android:id="@+id/setup"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="28dp">
+
+            <ImageView
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:contentDescription="@string/setup_title"
+                android:src="@drawable/logo" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/setup_title"
+                android:textColor="@color/ink"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/setup_text"
+                android:textColor="@color/ink2"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/address"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/field"
+                android:hint="@string/setup_hint"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:paddingHorizontal="16dp"
+                android:singleLine="true"
+                android:textColor="@color/ink"
+                android:textColorHint="@color/muted"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/connect"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/button_primary"
+                android:stateListAnimator="@null"
+                android:text="@string/connect"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/setupStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:textColor="@color/ink2"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Сервер недоступен -->
+    <LinearLayout
+        android:id="@+id/error"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="28dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:alpha="0.9"
+            android:contentDescription="@string/error_title"
+            android:src="@drawable/logo" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/error_title"
+            android:textColor="@color/ink"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/errorText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:lineSpacingExtra="3dp"
+            android:text="@string/error_text"
+            android:textColor="@color/ink2"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/retry"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/button_primary"
+            android:stateListAnimator="@null"
+            android:text="@string/retry"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/change"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/button_ghost"
+            android:stateListAnimator="@null"
+            android:text="@string/change_address"
+            android:textAllCaps="false"
+            android:textColor="@color/ink"
+            android:textSize="16sp" />
+    </LinearLayout>
+</FrameLayout>
