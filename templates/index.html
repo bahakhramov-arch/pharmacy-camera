@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отчёты аптеки {{ branch }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f6f8;
+      --card: #fff;
+      --ink: #143044;
+      --muted: #5b7384;
+      --line: #d7e3ea;
+      --accent: #0e7c66;
+      --accent2: #1f4e78;
+      --warn: #c45c26;
+      --ok: #1a8a4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg); color: var(--ink);
+    }
+    header {
+      background: linear-gradient(120deg, #0e7c66, #1f4e78);
+      color: #fff; padding: 20px 28px;
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { margin: 0; font-size: 22px; font-weight: 650; }
+    header p { margin: 4px 0 0; opacity: .9; font-size: 14px; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .filters input, .filters select, .filters button {
+      border: 0; border-radius: 8px; padding: 8px 12px; font-size: 14px;
+    }
+    .filters button {
+      background: #fff; color: var(--accent2); font-weight: 600; cursor: pointer;
+    }
+    .wrap { padding: 22px 28px 40px; max-width: 1280px; margin: 0 auto; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+    .kpi {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,48,68,.04);
+    }
+    .kpi .lbl { color: var(--muted); font-size: 13px; }
+    .kpi .val { font-size: 32px; font-weight: 700; margin-top: 4px; letter-spacing: -.02em; }
+    .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 16px 18px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .on { background: var(--ok); }
+    .off { background: #b8c5ce; }
+    .err { color: var(--warn); }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .wrap, header { padding-left: 16px; padding-right: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Аптека {{ branch }} — отчёты</h1>
+      <p>Посетители и сотрудники · обновление каждые 15 сек</p>
+    </div>
+    <form class="filters" onsubmit="return loadAll(event)">
+      <label>С <input type="date" id="from" required></label>
+      <label>по <input type="date" id="to" required></label>
+      <button type="submit">Показать</button>
+    </form>
+  </header>
+  <div class="wrap">
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">Зашло сегодня</div><div class="val" id="kToday">—</div><div class="sub" id="kInside">вышло: — · внутри: —</div></div>
+      <div class="kpi"><div class="lbl">За период</div><div class="val" id="kPeriod">—</div><div class="sub" id="kAvg">среднее в день: —</div></div>
+      <div class="kpi"><div class="lbl">Пик по часам</div><div class="val" id="kPeak">—</div><div class="sub" id="kPeakSub">час с наибольшим потоком</div></div>
+      <div class="kpi"><div class="lbl">Сотрудники на месте</div><div class="val" id="kStaff">—</div><div class="sub" id="kStaffSub">сегодня отметок: —</div></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Посетители по часам</h2>
+        <canvas id="hoursChart" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Посетители по дням</h2>
+        <canvas id="daysChart" height="120"></canvas>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Сотрудники за период</h2>
+        <div id="staffTable">Загрузка…</div>
+      </div>
+      <div class="card">
+        <h2>Кто сейчас на работе</h2>
+        <div id="liveStaff">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const WD = ["пн","вт","ср","чт","пт","сб","вс"];
+    let hoursChart, daysChart;
+
+    function iso(d) { return d.toISOString().slice(0, 10); }
+    function fmtDur(sec) {
+      const m = Math.round(sec / 60);
+      return Math.floor(m / 60) + " ч " + String(m % 60).padStart(2, "0") + " мин";
+    }
+
+    (function initDates() {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(to.getDate() - 6);
+      document.getElementById("from").value = iso(from);
+      document.getElementById("to").value = iso(to);
+    })();
+
+    async function loadAll(ev) {
+      if (ev) ev.preventDefault();
+      const from = document.getElementById("from").value;
+      const to = document.getElementById("to").value;
+      try {
+        const r = await fetch(`/api/overview?from=${from}&to=${to}`);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        render(d);
+      } catch (e) {
+        document.getElementById("staffTable").innerHTML =
+          `<p class="err">Не удалось загрузить данные: ${e.message}</p>`;
+      }
+      return false;
+    }
+
+    function render(d) {
+      document.getElementById("kToday").textContent = d.visitors_today;
+      document.getElementById("kInside").textContent = "вышло: " + d.visitors_exited + " · внутри: ≈" + d.visitors_inside;
+      document.getElementById("kPeriod").textContent = d.visitors.total;
+      document.getElementById("kAvg").textContent = "среднее в день: " + d.visitors.avg_per_day;
+      document.getElementById("kPeak").textContent =
+        d.visitors.peak_hour == null ? "—" : (String(d.visitors.peak_hour).padStart(2,"0") + ":00");
+      document.getElementById("kPeakSub").textContent = d.visitors.peak_hour == null
+        ? "нет данных" : ("заходов в этот час: " + d.visitors.by_hour[d.visitors.peak_hour]);
+      document.getElementById("kStaff").textContent = d.staff_present.length;
+      document.getElementById("kStaffSub").textContent = "сегодня отметок: " + d.staff_today_count;
+
+      const hours = Array.from({length: 24}, (_, h) => h);
+      const hourVals = hours.map(h => d.visitors.by_hour[h] || 0);
+      upsertChart("hoursChart", "hoursChart", hours.map(h => String(h).padStart(2,"0")), hourVals, "#0e7c66");
+
+      const days = d.day_list;
+      const dayVals = days.map(x => d.visitors.by_day[x] || 0);
+      const dayLbl = days.map(x => {
+        const p = x.split("-");
+        const js = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).getUTCDay();
+        const wd = WD[js === 0 ? 6 : js - 1];
+        return p[2] + "." + p[1] + " " + wd;
+      });
+      upsertChart("daysChart", "daysChart", dayLbl, dayVals, "#1f4e78");
+
+      const staff = d.staff || [];
+      if (!staff.length) {
+        document.getElementById("staffTable").innerHTML = "<p>За период отметок сотрудников нет.</p>";
+      } else {
+        let html = "<table><thead><tr><th>Сотрудник</th><th>Дней</th><th>Часы</th><th>Опозданий</th></tr></thead><tbody>";
+        for (const s of staff) {
+          html += `<tr><td>${s.name}</td><td>${s.days}</td><td>${s.hours.toFixed(1)}</td><td>${s.late_cnt}</td></tr>`;
+        }
+        html += "</tbody></table>";
+        document.getElementById("staffTable").innerHTML = html;
+      }
+
+      const live = d.staff_live || [];
+      if (!live.length) {
+        document.getElementById("liveStaff").innerHTML = "<p>Сейчас никого нет на месте.</p>";
+      } else {
+        let html = "<table><thead><tr><th>Сотрудник</th><th>Статус</th><th>С</th><th>Отработано</th></tr></thead><tbody>";
+        for (const s of live) {
+          const on = s.present;
+          html += `<tr><td>${s.name}</td><td><span class="dot ${on ? "on":"off"}"></span>${on ? "на месте":"ушёл"}</td><td>${s.first_in || "—"}</td><td>${fmtDur(s.worked_sec)}</td></tr>`;
+        }
+        html += "</tbody></table>";
+        document.getElementById("liveStaff").innerHTML = html;
+      }
+    }
+
+    function upsertChart(globalName, canvasId, labels, data, color) {
+      const ctx = document.getElementById(canvasId);
+      if (window[globalName] && window[globalName].destroy) window[globalName].destroy();
+      window[globalName] = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            data, backgroundColor: color + "cc", borderRadius: 6, maxBarThickness: 28
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    loadAll();
+    setInterval(loadAll, 15000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# секреты и личные данные - переносить отдельно (флешкой), не в git
+secrets.env
+photos/
+# история и состояние конкретного компьютера
+events.csv
+visitors.csv
+attendance.csv
+last_seen.json
+report_state.json
+reports/
+logs/
+backup_*/
+_webcam.jpg
+# модели скачиваются сами при первом запуске
+*.onnx
+__pycache__/
