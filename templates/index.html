@@ -3,61 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Аптека {{ branch }} · отчёты</title>
+<title>Аптека 5+ · {{ branch }}</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
 <style>
+  /* Основная тема - тёмная: чёрный + фиолетовый (цвета бренда «5+»).
+     Вход/выход проверены на различимость (в т.ч. дальтонизм): фиолетовый vs оранжевый. */
   :root {
-    color-scheme: light;
-    --page: #f4f5f3;
-    --surface: #fcfcfb;
-    --surface-2: #f0f1ee;
-    --ink: #0b0b0b;
-    --ink-2: #52514e;
-    --muted: #898781;
-    --grid: #e7e6e0;
-    --axis: #c3c2b7;
-    --border: rgba(11, 11, 11, .09);
-    --accent: #0f7a5c;
-    --accent-ink: #ffffff;
-    --accent-soft: #e2f1eb;
-    --in: #2a78d6;
-    --out: #eb6834;
-    --good: #0ca30c;
-    --good-ink: #006300;
-    --warn: #fab219;
-    --warn-ink: #8a5a00;
-    --crit: #d03b3b;
-    --heat-0: #eef4fc;
-    /* тепловая карта: больше людей = заметнее на своём фоне */
-    --h1: #cde2fb; --h2: #9ec5f4; --h3: #6da7ec; --h4: #3987e5; --h5: #256abf; --h6: #184f95; --h7: #0d366b;
-    --shadow: 0 1px 2px rgba(11, 11, 11, .04), 0 4px 16px rgba(11, 11, 11, .04);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-      --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .09);
-      --accent: #2bb38a; --accent-ink: #06231a; --accent-soft: #15302a;
-      --in: #3987e5; --out: #d95926; --good-ink: #0ca30c; --warn-ink: #fab219;
-      --heat-0: #1f2530; --shadow: none;
-      --h1: #184f95; --h2: #1c5cab; --h3: #256abf; --h4: #3987e5; --h5: #6da7ec; --h6: #9ec5f4; --h7: #cde2fb;
-    }
-  }
-  :root[data-theme="dark"] {
     color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .09);
-    --accent: #2bb38a; --accent-ink: #06231a; --accent-soft: #15302a;
-    --in: #3987e5; --out: #d95926; --good-ink: #0ca30c; --warn-ink: #fab219;
-    --heat-0: #1f2530; --shadow: none;
-    --h1: #184f95; --h2: #1c5cab; --h3: #256abf; --h4: #3987e5; --h5: #6da7ec; --h6: #9ec5f4; --h7: #cde2fb;
+    --page: #0a090e;
+    --surface: #15131d;
+    --surface-2: #1f1c2b;
+    --ink: #f2f0f7;
+    --ink-2: #c4bfd3;
+    --muted: #8c87a0;
+    --grid: #26232f;
+    --axis: #36323f;
+    --border: rgba(255, 255, 255, .08);
+    --accent: #8b6cf6;
+    --accent-2: #6d3df5;
+    --accent-ink: #ffffff;
+    --accent-soft: #2a2142;
+    --glow: rgba(139, 108, 246, .18);
+    --in: #8b6cf6;
+    --out: #dd6f2e;
+    --good: #0ca30c;
+    --good-ink: #2fc52f;
+    --warn: #fab219;
+    --warn-ink: #fab219;
+    --crit: #e05555;
+    --heat-0: #1c1926;
+    /* тепловая карта: больше людей = ярче */
+    --h1: #2e2450; --h2: #3f2f78; --h3: #553da6; --h4: #6d4fd0; --h5: #8b6cf6; --h6: #b19dfa; --h7: #ddd3fe;
+    --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 8px 24px rgba(0, 0, 0, .35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #f6f5fa; --surface: #ffffff; --surface-2: #f1eff8;
+    --ink: #14111f; --ink-2: #4f4a5e; --muted: #857f96;
+    --grid: #ebe8f2; --axis: #cfcadb; --border: rgba(20, 17, 31, .09);
+    --accent: #6d3df5; --accent-2: #5a2be0; --accent-ink: #ffffff; --accent-soft: #ece6ff;
+    --glow: rgba(109, 61, 245, .10);
+    --in: #7c4dff; --out: #e0661f; --good-ink: #006300; --warn-ink: #8a5a00; --crit: #d03b3b;
+    --heat-0: #f1eef9;
+    --h1: #e2dbfd; --h2: #c7b8fb; --h3: #a88ff8; --h4: #8b6cf6; --h5: #6d4fd0; --h6: #4f37a3; --h7: #2e2068;
+    --shadow: 0 1px 2px rgba(20, 17, 31, .04), 0 6px 18px rgba(20, 17, 31, .05);
   }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; }
   body {
-    background: var(--page); color: var(--ink);
+    background:
+      radial-gradient(900px 420px at 15% -120px, var(--glow), transparent 70%),
+      radial-gradient(700px 360px at 100% -160px, var(--glow), transparent 70%),
+      var(--page);
+    background-attachment: fixed;
+    color: var(--ink); min-height: 100vh;
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -73,12 +73,14 @@
   }
   .top-in {
     max-width: 1240px; margin: 0 auto; padding: 12px 24px;
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 10px;
   }
-  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; min-width: 0; }
+  .brand > div { min-width: 0; }
+  .brand h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .logo {
-    width: 34px; height: 34px; border-radius: 10px; background: var(--accent);
-    display: grid; place-items: center; color: var(--accent-ink);
+    width: 40px; height: 40px; border-radius: 50%; display: block; flex: none;
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border), 0 4px 18px rgba(245, 10, 10, .25);
   }
   .brand h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
   .brand p { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -98,7 +100,10 @@
     font-weight: 550; white-space: nowrap;
   }
   .btn:hover { background: var(--surface-2); }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: var(--accent-ink);
+    border-color: transparent; box-shadow: 0 4px 16px rgba(109, 61, 245, .35);
+  }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn.icon { padding: 7px 9px; }
   .btn:focus-visible, .seg button:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -130,6 +135,9 @@
     font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
   }
   .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--ink-2); }
+  .card, .tile { transition: border-color .15s; }
+  .card:hover, .tile:not(.hero):hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
   .tab .count {
     margin-left: 6px; font-size: 11px; background: var(--surface-2); color: var(--ink-2);
     padding: 1px 6px; border-radius: 99px;
@@ -151,7 +159,11 @@
   .tile .val small { font-size: 15px; font-weight: 550; color: var(--ink-2); letter-spacing: 0; }
   .tile .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
   .key { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
-  .tile.hero { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .tile.hero {
+    background: linear-gradient(135deg, var(--accent-2), var(--accent) 60%, #a98bff);
+    color: var(--accent-ink); border-color: transparent;
+    box-shadow: 0 10px 30px rgba(109, 61, 245, .35);
+  }
   .tile.hero .lbl, .tile.hero .sub, .tile.hero .val small { color: inherit; opacity: .85; }
 
   .grid { display: grid; gap: 12px; margin-top: 12px; }
@@ -259,7 +271,10 @@
   @media (max-width: 980px) { .g-2, .g-2e { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
     .top-in, .bar, .tabs, main { padding-left: 16px; padding-right: 16px; }
-    .tile .val { font-size: 25px; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .tile.hero { grid-column: 1 / -1; }
+    .tile { padding: 12px 13px; }
+    .tile .val { font-size: 24px; }
     .range { width: 100%; }
     .range input { flex: 1; min-width: 0; }
     .btn .txt-lg { display: none; }
@@ -272,11 +287,9 @@
 <header class="top">
   <div class="top-in">
     <div class="brand">
-      <div class="logo" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-      </div>
+      <img class="logo" src="/static/logo.png" alt="Аптека 5+">
       <div>
-        <h1 id="title">Аптека</h1>
+        <h1 id="title">Аптека 5+</h1>
         <p><span class="pulse" id="pulse"></span><span id="updated">загрузка…</span></p>
       </div>
     </div>
@@ -621,7 +634,7 @@
 
   function render(d) {
     const v = d.visitors, days = d.day_list;
-    $("title").textContent = `Аптека ${d.branch}`;
+    $("title").textContent = `Аптека 5+ · ${d.branch}`;
     $("updated").textContent = `обновлено в ${d.now.slice(0, 5)}`;
     $("logCount").textContent = d.feed.length;
     const single = days.length === 1;
@@ -752,16 +765,14 @@
     location.href = url;
   });
   $("themeBtn").addEventListener("click", () => {
-    const cur = document.documentElement.dataset.theme ||
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    const next = cur === "dark" ? "light" : "dark";
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
     document.documentElement.dataset.theme = next; store.set("theme", next);
     if (state.data) render(state.data);
   });
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => state.data && render(state.data), 150); });
 
   // ---------- старт ----------
-  const th = store.get("theme"); if (th) document.documentElement.dataset.theme = th;
+  document.documentElement.dataset.theme = store.get("theme") === "light" ? "light" : "dark"; // по умолчанию тёмная
   const hv = location.hash.slice(1);
   show(["overview", "clients", "staff", "log"].includes(hv) ? hv : "overview");
   setPreset(store.get("preset") && store.get("preset") !== "custom" ? store.get("preset") : "today");
