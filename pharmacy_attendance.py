@@ -964,8 +964,16 @@ def main():
     missing = check_settings()
     if missing:
         print("Не заполнено: " + ", ".join(missing))
-        print("Откройте файл secrets.env рядом со скриптом и впишите значения "
-              "(или задайте их переменными окружения).")
+        env_path = os.path.join(BASE_DIR, "secrets.env")
+        if not os.path.exists(env_path):
+            print(f"Файл не найден: {env_path}")
+            near = [f for f in os.listdir(BASE_DIR) if f.lower().startswith("secrets")]
+            if near:
+                print("Рядом есть: " + ", ".join(near) + " - переименуйте нужный ровно в secrets.env "
+                      "(Windows часто прячет «.txt» на конце имени)")
+        else:
+            print(f"Файл {env_path} найден, но в нём нет этих строк. Нужно: КЛЮЧ=значение, "
+                  "например BOT_TOKEN=123:ABC")
         return
     download_models()
     detector = cv2.FaceDetectorYN.create(
