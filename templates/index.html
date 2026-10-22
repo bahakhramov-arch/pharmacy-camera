@@ -1,219 +1,772 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Отчёты аптеки {{ branch }}</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <style>
-    :root {
-      --bg: #f3f6f8;
-      --card: #fff;
-      --ink: #143044;
-      --muted: #5b7384;
-      --line: #d7e3ea;
-      --accent: #0e7c66;
-      --accent2: #1f4e78;
-      --warn: #c45c26;
-      --ok: #1a8a4a;
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аптека {{ branch }} · отчёты</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f5f3;
+    --surface: #fcfcfb;
+    --surface-2: #f0f1ee;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e7e6e0;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, .09);
+    --accent: #0f7a5c;
+    --accent-ink: #ffffff;
+    --accent-soft: #e2f1eb;
+    --in: #2a78d6;
+    --out: #eb6834;
+    --good: #0ca30c;
+    --good-ink: #006300;
+    --warn: #fab219;
+    --warn-ink: #8a5a00;
+    --crit: #d03b3b;
+    --heat-0: #eef4fc;
+    /* тепловая карта: больше людей = заметнее на своём фоне */
+    --h1: #cde2fb; --h2: #9ec5f4; --h3: #6da7ec; --h4: #3987e5; --h5: #256abf; --h6: #184f95; --h7: #0d366b;
+    --shadow: 0 1px 2px rgba(11, 11, 11, .04), 0 4px 16px rgba(11, 11, 11, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .09);
+      --accent: #2bb38a; --accent-ink: #06231a; --accent-soft: #15302a;
+      --in: #3987e5; --out: #d95926; --good-ink: #0ca30c; --warn-ink: #fab219;
+      --heat-0: #1f2530; --shadow: none;
+      --h1: #184f95; --h2: #1c5cab; --h3: #256abf; --h4: #3987e5; --h5: #6da7ec; --h6: #9ec5f4; --h7: #cde2fb;
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: "Segoe UI", Arial, sans-serif;
-      background: var(--bg); color: var(--ink);
-    }
-    header {
-      background: linear-gradient(120deg, #0e7c66, #1f4e78);
-      color: #fff; padding: 20px 28px;
-      display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
-      justify-content: space-between;
-    }
-    header h1 { margin: 0; font-size: 22px; font-weight: 650; }
-    header p { margin: 4px 0 0; opacity: .9; font-size: 14px; }
-    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .filters input, .filters select, .filters button {
-      border: 0; border-radius: 8px; padding: 8px 12px; font-size: 14px;
-    }
-    .filters button {
-      background: #fff; color: var(--accent2); font-weight: 600; cursor: pointer;
-    }
-    .wrap { padding: 22px 28px 40px; max-width: 1280px; margin: 0 auto; }
-    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-    .kpi {
-      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-      padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,48,68,.04);
-    }
-    .kpi .lbl { color: var(--muted); font-size: 13px; }
-    .kpi .val { font-size: 32px; font-weight: 700; margin-top: 4px; letter-spacing: -.02em; }
-    .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
-    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
-    .card {
-      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-      padding: 16px 18px;
-    }
-    .card h2 { margin: 0 0 12px; font-size: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
-    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .on { background: var(--ok); }
-    .off { background: #b8c5ce; }
-    .err { color: var(--warn); }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-      .wrap, header { padding-left: 16px; padding-right: 16px; }
-    }
-  </style>
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, .09);
+    --accent: #2bb38a; --accent-ink: #06231a; --accent-soft: #15302a;
+    --in: #3987e5; --out: #d95926; --good-ink: #0ca30c; --warn-ink: #fab219;
+    --heat-0: #1f2530; --shadow: none;
+    --h1: #184f95; --h2: #1c5cab; --h3: #256abf; --h4: #3987e5; --h5: #6da7ec; --h6: #9ec5f4; --h7: #cde2fb;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- шапка ---------- */
+  .top {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--page) 88%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .top-in {
+    max-width: 1240px; margin: 0 auto; padding: 12px 24px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; background: var(--accent);
+    display: grid; place-items: center; color: var(--accent-ink);
+  }
+  .brand h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--good); position: relative; }
+  .pulse::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 50%;
+    border: 2px solid var(--good); opacity: 0; animation: ping 2s infinite;
+  }
+  .pulse.stale { background: var(--muted); }
+  .pulse.stale::after { display: none; }
+  @keyframes ping { 0% { opacity: .6; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.6); } }
+  @media (prefers-reduced-motion: reduce) { .pulse::after { animation: none; } }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 9px;
+    padding: 7px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+    font-weight: 550; white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.icon { padding: 7px 9px; }
+  .btn:focus-visible, .seg button:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- период и вкладки ---------- */
+  .bar {
+    max-width: 1240px; margin: 0 auto; padding: 16px 24px 0;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  }
+  .seg {
+    display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px;
+    overflow-x: auto; max-width: 100%;
+  }
+  .seg button {
+    border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    color: var(--ink-2); font-weight: 550; white-space: nowrap;
+  }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .range { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .range input {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 8px;
+  }
+  .tabs {
+    max-width: 1240px; margin: 0 auto; padding: 14px 24px 0; display: flex; gap: 4px;
+    border-bottom: 1px solid var(--border); overflow-x: auto;
+  }
+  .tab {
+    border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--muted);
+    font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+  }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab .count {
+    margin-left: 6px; font-size: 11px; background: var(--surface-2); color: var(--ink-2);
+    padding: 1px 6px; border-radius: 99px;
+  }
+
+  main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 48px; }
+  .view { display: none; }
+  .view.on { display: block; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- карточки ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; box-shadow: var(--shadow); min-width: 0;
+  }
+  .tile .lbl { color: var(--ink-2); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+  .tile .val { font-size: 30px; font-weight: 680; letter-spacing: -.02em; margin-top: 2px; line-height: 1.15; }
+  .tile .val small { font-size: 15px; font-weight: 550; color: var(--ink-2); letter-spacing: 0; }
+  .tile .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .key { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+  .tile.hero { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .tile.hero .lbl, .tile.hero .sub, .tile.hero .val small { color: inherit; opacity: .85; }
+
+  .grid { display: grid; gap: 12px; margin-top: 12px; }
+  .g-2 { grid-template-columns: 1.55fr 1fr; }
+  .g-2e { grid-template-columns: 1fr 1fr; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; box-shadow: var(--shadow); min-width: 0;
+  }
+  .card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .card h2 { font-size: 15px; margin: 0; font-weight: 650; }
+  .card .hint { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ---------- графики ---------- */
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart .gl { stroke: var(--grid); stroke-width: 1; }
+  .chart .base { stroke: var(--axis); stroke-width: 1; }
+  .chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart .hit:hover, .chart .hit.on { fill: var(--ink); fill-opacity: .045; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; min-width: 120px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, .12); font-size: 12.5px;
+    opacity: 0; transition: opacity .1s; white-space: nowrap;
+  }
+  .tip b { display: block; margin-bottom: 4px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+  .tip div { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+  .tip div span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .tip div em { font-style: normal; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .empty {
+    color: var(--muted); text-align: center; padding: 36px 10px; font-size: 13px;
+    border: 1px dashed var(--border); border-radius: 10px;
+  }
+
+  .heat { display: grid; gap: 2px; font-size: 11px; color: var(--muted); }
+  .heat .c { height: 22px; border-radius: 4px; background: var(--heat-0); position: relative; }
+  .heat .c:hover { outline: 2px solid var(--ink); outline-offset: -1px; }
+  .heat .rl { display: flex; align-items: center; padding-right: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .heat .hl { text-align: center; font-variant-numeric: tabular-nums; }
+  .scale { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+  .scale i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- таблицы и списки ---------- */
+  .tbl-wrap { overflow-x: auto; margin: 0 -4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .who { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+  .ava {
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; flex: none;
+    text-transform: uppercase;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--ink-2);
+  }
+  .badge .d { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .badge.good { color: var(--good-ink); background: color-mix(in srgb, var(--good) 13%, transparent); }
+  .badge.good .d { background: var(--good); }
+  .badge.warn { color: var(--warn-ink); background: color-mix(in srgb, var(--warn) 18%, transparent); }
+  .badge.crit { color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, transparent); }
+
+  .people { display: grid; gap: 8px; }
+  .person {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px;
+    background: var(--surface-2);
+  }
+  .person .meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--muted); }
+  .person .meta b { display: block; color: var(--ink); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--grid); }
+  .feed li:last-child { border-bottom: 0; }
+  .feed .ic {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none;
+    background: var(--surface-2); color: var(--ink-2);
+  }
+  .feed .ic.in { color: var(--in); background: color-mix(in srgb, var(--in) 12%, transparent); }
+  .feed .ic.out { color: var(--out); background: color-mix(in srgb, var(--out) 12%, transparent); }
+  .feed .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .feed .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .hbars { display: grid; gap: 10px; }
+  .hb { display: grid; grid-template-columns: 110px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; }
+  .hb .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .hb .track { height: 12px; }
+  .hb .fill { height: 100%; background: var(--in); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .hb .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+  .chips { display: flex; gap: 6px; }
+  .err-box {
+    background: color-mix(in srgb, var(--crit) 10%, var(--surface)); color: var(--crit);
+    border: 1px solid color-mix(in srgb, var(--crit) 30%, transparent);
+    border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; display: none;
+  }
+
+  @media (max-width: 980px) { .g-2, .g-2e { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) {
+    .top-in, .bar, .tabs, main { padding-left: 16px; padding-right: 16px; }
+    .tile .val { font-size: 25px; }
+    .range { width: 100%; }
+    .range input { flex: 1; min-width: 0; }
+    .btn .txt-lg { display: none; }
+    .hb { grid-template-columns: 80px 1fr 56px; }
+  }
+</style>
 </head>
-<body>
-  <header>
-    <div>
-      <h1>Аптека {{ branch }} — отчёты</h1>
-      <p>Посетители и сотрудники · обновление каждые 15 сек</p>
-    </div>
-    <form class="filters" onsubmit="return loadAll(event)">
-      <label>С <input type="date" id="from" required></label>
-      <label>по <input type="date" id="to" required></label>
-      <button type="submit">Показать</button>
-    </form>
-  </header>
-  <div class="wrap">
-    <div class="kpis">
-      <div class="kpi"><div class="lbl">Зашло сегодня</div><div class="val" id="kToday">—</div><div class="sub" id="kInside">вышло: — · внутри: —</div></div>
-      <div class="kpi"><div class="lbl">За период</div><div class="val" id="kPeriod">—</div><div class="sub" id="kAvg">среднее в день: —</div></div>
-      <div class="kpi"><div class="lbl">Пик по часам</div><div class="val" id="kPeak">—</div><div class="sub" id="kPeakSub">час с наибольшим потоком</div></div>
-      <div class="kpi"><div class="lbl">Сотрудники на месте</div><div class="val" id="kStaff">—</div><div class="sub" id="kStaffSub">сегодня отметок: —</div></div>
-    </div>
-    <div class="grid">
-      <div class="card">
-        <h2>Посетители по часам</h2>
-        <canvas id="hoursChart" height="120"></canvas>
+<body data-branch="{{ branch }}">
+{% raw %}
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       </div>
-      <div class="card">
-        <h2>Посетители по дням</h2>
-        <canvas id="daysChart" height="120"></canvas>
+      <div>
+        <h1 id="title">Аптека</h1>
+        <p><span class="pulse" id="pulse"></span><span id="updated">загрузка…</span></p>
       </div>
     </div>
-    <div class="grid">
-      <div class="card">
-        <h2>Сотрудники за период</h2>
-        <div id="staffTable">Загрузка…</div>
-      </div>
-      <div class="card">
-        <h2>Кто сейчас на работе</h2>
-        <div id="liveStaff">Загрузка…</div>
-      </div>
-    </div>
+    <button class="btn icon" id="themeBtn" title="Светлая / тёмная тема" aria-label="Сменить тему">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <button class="btn primary" id="excelBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+      <span>Excel<span class="txt-lg"> за период</span></span>
+    </button>
   </div>
-  <script>
-    const WD = ["пн","вт","ср","чт","пт","сб","вс"];
-    let hoursChart, daysChart;
+</header>
 
-    function iso(d) { return d.toISOString().slice(0, 10); }
-    function fmtDur(sec) {
-      const m = Math.round(sec / 60);
-      return Math.floor(m / 60) + " ч " + String(m % 60).padStart(2, "0") + " мин";
+<div class="bar">
+  <div class="seg" role="group" aria-label="Период">
+    <button data-p="today">Сегодня</button>
+    <button data-p="yesterday">Вчера</button>
+    <button data-p="7">7 дней</button>
+    <button data-p="30">30 дней</button>
+    <button data-p="month">Этот месяц</button>
+  </div>
+  <div class="range">
+    <input type="date" id="from" aria-label="С"> — <input type="date" id="to" aria-label="По">
+  </div>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-v="overview">Обзор</button>
+  <button class="tab" role="tab" data-v="clients">Клиенты</button>
+  <button class="tab" role="tab" data-v="staff">Сотрудники</button>
+  <button class="tab" role="tab" data-v="log">Журнал<span class="count" id="logCount">0</span></button>
+</nav>
+
+<main>
+  <div class="err-box" id="err"></div>
+
+  <!-- ================= ОБЗОР ================= -->
+  <section class="view" id="v-overview">
+    <div class="tiles">
+      <div class="tile hero">
+        <div class="lbl">Сейчас в аптеке</div>
+        <div class="val num" id="o-inside">—</div>
+        <div class="sub">оценка: вошло − вышло сегодня</div>
+      </div>
+      <div class="tile">
+        <div class="lbl"><i class="key" style="background:var(--in)"></i>Зашло клиентов</div>
+        <div class="val num" id="o-in">—</div>
+        <div class="sub" id="o-in-sub">за период</div>
+      </div>
+      <div class="tile">
+        <div class="lbl"><i class="key" style="background:var(--out)"></i>Вышло</div>
+        <div class="val num" id="o-out">—</div>
+        <div class="sub">за период</div>
+      </div>
+      <div class="tile">
+        <div class="lbl">Час пик</div>
+        <div class="val num" id="o-peak">—</div>
+        <div class="sub" id="o-peak-sub">—</div>
+      </div>
+      <div class="tile">
+        <div class="lbl">Сотрудники на месте</div>
+        <div class="val num" id="o-staff">—</div>
+        <div class="sub" id="o-staff-sub">—</div>
+      </div>
+    </div>
+
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-h">
+          <h2>Клиенты по часам</h2>
+          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
+        </div>
+        <div class="chart" id="c-hours"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Кто на работе сегодня</h2><span class="hint" id="o-today"></span></div>
+        <div class="people" id="o-people"></div>
+      </div>
+    </div>
+
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-h">
+          <h2>Клиенты по дням</h2>
+          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
+        </div>
+        <div class="chart" id="c-days"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Последние события</h2><span class="hint">за период</span></div>
+        <ul class="feed" id="o-feed"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= КЛИЕНТЫ ================= -->
+  <section class="view" id="v-clients">
+    <div class="tiles">
+      <div class="tile"><div class="lbl"><i class="key" style="background:var(--in)"></i>Зашло</div><div class="val num" id="c-in">—</div><div class="sub">за период</div></div>
+      <div class="tile"><div class="lbl"><i class="key" style="background:var(--out)"></i>Вышло</div><div class="val num" id="c-out">—</div><div class="sub">за период</div></div>
+      <div class="tile"><div class="lbl">В среднем за день</div><div class="val num" id="c-avg">—</div><div class="sub">входов</div></div>
+      <div class="tile"><div class="lbl">Самый загруженный день</div><div class="val num" id="c-best">—</div><div class="sub" id="c-best-sub">—</div></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-h">
+          <h2>Загрузка по дням и часам</h2>
+          <span class="hint">сколько человек зашло в каждый час</span>
+        </div>
+        <div id="c-heat"></div>
+      </div>
+    </div>
+    <div class="grid g-2e">
+      <div class="card">
+        <div class="card-h">
+          <h2>По часам</h2>
+          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
+        </div>
+        <div class="chart" id="c-hours2"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Таблица по дням</h2></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Дата</th><th class="r">Зашло</th><th class="r">Вышло</th><th class="r">Час пик</th></tr></thead><tbody id="c-table"></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= СОТРУДНИКИ ================= -->
+  <section class="view" id="v-staff">
+    <div class="tiles">
+      <div class="tile"><div class="lbl">На месте сейчас</div><div class="val num" id="s-now">—</div><div class="sub" id="s-now-sub">—</div></div>
+      <div class="tile"><div class="lbl">Отработано всего</div><div class="val num" id="s-hours">—</div><div class="sub">за период</div></div>
+      <div class="tile"><div class="lbl">Смен</div><div class="val num" id="s-shifts">—</div><div class="sub">рабочих дней × сотрудников</div></div>
+      <div class="tile"><div class="lbl">Опозданий</div><div class="val num" id="s-late">—</div><div class="sub" id="s-late-sub">—</div></div>
+    </div>
+    <div class="grid g-2">
+      <div class="card">
+        <div class="card-h"><h2>Итоги по сотрудникам</h2><span class="hint">за период</span></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Сотрудник</th><th class="r">Дней</th><th class="r">Часов</th><th class="r">В среднем</th><th class="r">Опозданий</th></tr></thead>
+          <tbody id="s-table"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Часы за период</h2></div>
+        <div class="hbars" id="s-bars"></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-h"><h2>По дням: приход и уход</h2><span class="hint">уход фиксируется, когда сотрудника не видно 30 мин</span></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Дата</th><th>Сотрудник</th><th class="r">Пришёл</th><th class="r">Ушёл</th><th class="r">Отработано</th><th>Статус</th></tr></thead>
+          <tbody id="s-days"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ЖУРНАЛ ================= -->
+  <section class="view" id="v-log">
+    <div class="card">
+      <div class="card-h">
+        <h2>Все события за период</h2>
+        <div class="seg chips" role="group" aria-label="Фильтр">
+          <button data-f="all" aria-pressed="true">Все</button>
+          <button data-f="client">Клиенты</button>
+          <button data-f="staff">Сотрудники</button>
+        </div>
+      </div>
+      <ul class="feed" id="l-feed"></ul>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const WD = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+  const MON = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+  const state = { from: null, to: null, preset: "today", view: "overview", data: null, filter: "all" };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  };
+
+  // ---------- даты ----------
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const short = (s) => { const d = parse(s); return `${d.getDate()} ${MON[d.getMonth()]}`; };
+  const dayLbl = (s) => { const d = parse(s); return `${WD[d.getDay()]}, ${d.getDate()} ${MON[d.getMonth()]}`; };
+  const hh = (h) => String(h).padStart(2, "0") + ":00";
+  const dur = (sec) => {
+    const m = Math.round((sec || 0) / 60);
+    return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, "0")} мин`;
+  };
+  const lateTxt = (m) => (m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`);
+
+  function setPreset(p) {
+    const t = new Date(); let f = new Date(t), to = new Date(t);
+    if (p === "yesterday") { f.setDate(t.getDate() - 1); to = new Date(f); }
+    else if (p === "7") f.setDate(t.getDate() - 6);
+    else if (p === "30") f.setDate(t.getDate() - 29);
+    else if (p === "month") f = new Date(t.getFullYear(), t.getMonth(), 1);
+    state.preset = p; state.from = iso(f); state.to = iso(to);
+    $("from").value = state.from; $("to").value = state.to;
+    markPreset(); store.set("preset", p); load();
+  }
+  function markPreset() {
+    document.querySelectorAll(".bar .seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === state.preset)));
+  }
+
+  // ---------- вкладки ----------
+  function show(v) {
+    state.view = v;
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.v === v)));
+    document.querySelectorAll(".view").forEach((s) => s.classList.toggle("on", s.id === "v-" + v));
+    if (location.hash !== "#" + v) history.replaceState(null, "", "#" + v);
+    if (state.data) render(state.data); // графики считают ширину только у видимых
+  }
+
+  // ---------- графики (SVG без библиотек) ----------
+  // верх оси = 4 одинаковых целых шага (1, 2, 5, 10, 20, 25, 50…): подписи без дробей
+  function niceMax(v) {
+    const raw = Math.max(1, v) / 4;
+    const p = Math.pow(10, Math.floor(Math.log10(raw))); const n = raw / p;
+    const step = Math.max(1, (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p);
+    return (Number.isInteger(step) ? step : Math.ceil(step)) * 4;
+  }
+  // скруглён только верх столбика (4px), низ стоит на базовой линии
+  const barPath = (x, y, w, h) => {
+    if (h <= 0) return "";
+    const r = Math.min(4, w / 2, h);
+    return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+  };
+
+  function groupedBars(el, cats, series, labelOf, tipTitle) {
+    const total = series.reduce((s, x) => s + x.values.reduce((a, b) => a + b, 0), 0);
+    if (!total) { el.innerHTML = `<div class="empty">За этот период пока нет данных</div>`; return; }
+    const W = Math.max(el.clientWidth || 600, 280), H = 230, L = 30, R = 6, T = 10, B = 26;
+    const pw = W - L - R, ph = H - T - B;
+    const max = niceMax(Math.max(...series.flatMap((s) => s.values)));
+    const step = pw / cats.length, gap = 2;
+    const bw = Math.max(2, Math.min(22, (step * 0.72 - gap * (series.length - 1)) / series.length));
+    const grp = bw * series.length + gap * (series.length - 1);
+    const y = (v) => T + ph - (v / max) * ph;
+    let g = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = (max / 4) * i, yy = y(v);
+      g += `<line class="${i ? "gl" : "base"}" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/>`;
+      g += `<text x="${L - 6}" y="${yy + 3.5}" text-anchor="end">${Math.round(v)}</text>`;
     }
-
-    (function initDates() {
-      const to = new Date();
-      const from = new Date();
-      from.setDate(to.getDate() - 6);
-      document.getElementById("from").value = iso(from);
-      document.getElementById("to").value = iso(to);
-    })();
-
-    async function loadAll(ev) {
-      if (ev) ev.preventDefault();
-      const from = document.getElementById("from").value;
-      const to = document.getElementById("to").value;
-      try {
-        const r = await fetch(`/api/overview?from=${from}&to=${to}`);
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const d = await r.json();
-        render(d);
-      } catch (e) {
-        document.getElementById("staffTable").innerHTML =
-          `<p class="err">Не удалось загрузить данные: ${e.message}</p>`;
-      }
-      return false;
-    }
-
-    function render(d) {
-      document.getElementById("kToday").textContent = d.visitors_today;
-      document.getElementById("kInside").textContent = "вышло: " + d.visitors_exited + " · внутри: ≈" + d.visitors_inside;
-      document.getElementById("kPeriod").textContent = d.visitors.total;
-      document.getElementById("kAvg").textContent = "среднее в день: " + d.visitors.avg_per_day;
-      document.getElementById("kPeak").textContent =
-        d.visitors.peak_hour == null ? "—" : (String(d.visitors.peak_hour).padStart(2,"0") + ":00");
-      document.getElementById("kPeakSub").textContent = d.visitors.peak_hour == null
-        ? "нет данных" : ("заходов в этот час: " + d.visitors.by_hour[d.visitors.peak_hour]);
-      document.getElementById("kStaff").textContent = d.staff_present.length;
-      document.getElementById("kStaffSub").textContent = "сегодня отметок: " + d.staff_today_count;
-
-      const hours = Array.from({length: 24}, (_, h) => h);
-      const hourVals = hours.map(h => d.visitors.by_hour[h] || 0);
-      upsertChart("hoursChart", "hoursChart", hours.map(h => String(h).padStart(2,"0")), hourVals, "#0e7c66");
-
-      const days = d.day_list;
-      const dayVals = days.map(x => d.visitors.by_day[x] || 0);
-      const dayLbl = days.map(x => {
-        const p = x.split("-");
-        const js = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).getUTCDay();
-        const wd = WD[js === 0 ? 6 : js - 1];
-        return p[2] + "." + p[1] + " " + wd;
+    const every = Math.ceil(cats.length / Math.max(1, Math.floor(pw / 46)));
+    let bars = "", hits = "", lbls = "";
+    cats.forEach((c, i) => {
+      const x0 = L + step * i + (step - grp) / 2;
+      series.forEach((s, k) => {
+        const v = s.values[i]; if (!v) return;
+        bars += `<path d="${barPath(x0 + k * (bw + gap), y(v), bw, y(0) - y(v))}" style="fill:${s.color}"/>`;
       });
-      upsertChart("daysChart", "daysChart", dayLbl, dayVals, "#1f4e78");
-
-      const staff = d.staff || [];
-      if (!staff.length) {
-        document.getElementById("staffTable").innerHTML = "<p>За период отметок сотрудников нет.</p>";
-      } else {
-        let html = "<table><thead><tr><th>Сотрудник</th><th>Дней</th><th>Часы</th><th>Опозданий</th></tr></thead><tbody>";
-        for (const s of staff) {
-          html += `<tr><td>${s.name}</td><td>${s.days}</td><td>${s.hours.toFixed(1)}</td><td>${s.late_cnt}</td></tr>`;
-        }
-        html += "</tbody></table>";
-        document.getElementById("staffTable").innerHTML = html;
-      }
-
-      const live = d.staff_live || [];
-      if (!live.length) {
-        document.getElementById("liveStaff").innerHTML = "<p>Сейчас никого нет на месте.</p>";
-      } else {
-        let html = "<table><thead><tr><th>Сотрудник</th><th>Статус</th><th>С</th><th>Отработано</th></tr></thead><tbody>";
-        for (const s of live) {
-          const on = s.present;
-          html += `<tr><td>${s.name}</td><td><span class="dot ${on ? "on":"off"}"></span>${on ? "на месте":"ушёл"}</td><td>${s.first_in || "—"}</td><td>${fmtDur(s.worked_sec)}</td></tr>`;
-        }
-        html += "</tbody></table>";
-        document.getElementById("liveStaff").innerHTML = html;
-      }
-    }
-
-    function upsertChart(globalName, canvasId, labels, data, color) {
-      const ctx = document.getElementById(canvasId);
-      if (window[globalName] && window[globalName].destroy) window[globalName].destroy();
-      window[globalName] = new Chart(ctx, {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            data, backgroundColor: color + "cc", borderRadius: 6, maxBarThickness: 28
-          }]
-        },
-        options: {
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true, ticks: { precision: 0 } },
-            x: { grid: { display: false } }
-          }
-        }
+      hits += `<rect class="hit" data-i="${i}" x="${L + step * i}" y="${T}" width="${step}" height="${ph}" rx="4"/>`;
+      if (i % every === 0) lbls += `<text x="${L + step * i + step / 2}" y="${H - 8}" text-anchor="middle">${esc(labelOf(c))}</text>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(tipTitle)}">${g}${hits}${bars}${lbls}</svg><div class="tip"></div>`;
+    const tip = el.querySelector(".tip");
+    el.querySelectorAll(".hit").forEach((h) => {
+      h.addEventListener("mouseenter", () => {
+        const i = +h.dataset.i;
+        tip.innerHTML = `<b>${esc(tipTitle(cats[i]))}</b>` + series.map((s) =>
+          `<div><span><i class="key" style="background:${s.color}"></i>${esc(s.name)}</span><em>${s.values[i]}</em></div>`).join("");
+        const r = el.getBoundingClientRect(), hr = h.getBoundingClientRect();
+        let left = hr.left - r.left + hr.width / 2 - 70;
+        left = Math.max(0, Math.min(left, r.width - 150));
+        tip.style.left = left + "px"; tip.style.top = "-6px"; tip.style.opacity = 1;
       });
+      h.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
+    });
+  }
+
+  function heatmap(el, days, byHourDay) {
+    const vals = days.flatMap((d) => Object.values(byHourDay[d] || {}));
+    if (!vals.length) { el.innerHTML = `<div class="empty">За этот период пока нет входов</div>`; return; }
+    let hours = [];
+    days.forEach((d) => Object.keys(byHourDay[d] || {}).forEach((h) => hours.push(+h)));
+    const h0 = Math.min(7, ...hours), h1 = Math.max(22, ...hours);
+    hours = []; for (let h = h0; h <= h1; h++) hours.push(h);
+    const max = Math.max(...vals);
+    const ramp = [1, 2, 3, 4, 5, 6, 7].map((i) => `var(--h${i})`);
+    const col = (v) => (v ? ramp[Math.min(ramp.length - 1, Math.floor((v / max) * (ramp.length - 1e-9)))] : "");
+    const shown = days.length > 31 ? days.slice(-31) : days;
+    let html = `<div class="heat" style="grid-template-columns: 74px repeat(${hours.length}, minmax(14px, 1fr))"><div></div>`;
+    const lblEvery = hours.length > 14 ? 2 : 1;
+    hours.forEach((h, i) => { html += `<div class="hl">${i % lblEvery ? "" : h}</div>`; });
+    shown.forEach((d) => {
+      html += `<div class="rl">${esc(dayLbl(d))}</div>`;
+      hours.forEach((h) => {
+        const v = (byHourDay[d] || {})[h] || 0;
+        html += `<div class="c" style="${v ? "background:" + col(v) : ""}" title="${esc(dayLbl(d))}, ${hh(h)}–${String(h).padStart(2, "0")}:59 — зашло ${v}"></div>`;
+      });
+    });
+    html += `</div><div class="scale">меньше ${ramp.map((c) => `<i style="background:${c}"></i>`).join("")} больше <span style="margin-left:auto">макс. ${max} чел./час</span></div>`;
+    el.innerHTML = html;
+  }
+
+  // ---------- блоки ----------
+  const ava = (n) => `<span class="ava">${esc((n || "?").slice(0, 2))}</span>`;
+  const icon = {
+    in: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 17l5-5-5-5M15 12H3M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/></svg>`,
+    out: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 17l5-5-5-5M19 12H7M9 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4"/></svg>`,
+    user: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`,
+    warn: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 8v5M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>`,
+  };
+
+  function feedHtml(items) {
+    if (!items.length) return `<li><span class="txt" style="color:var(--muted)">Событий нет</span></li>`;
+    return items.map((e) => {
+      const t = e.when.slice(11, 16), d = e.when.slice(0, 10);
+      const sameDay = state.from === state.to;
+      let ic, txt;
+      if (e.kind === "client") {
+        const isIn = e.type === "вход";
+        ic = `<span class="ic ${isIn ? "in" : "out"}">${isIn ? icon.in : icon.out}</span>`;
+        txt = `Клиент ${isIn ? "зашёл" : "вышел"} <span style="color:var(--muted)">· ${esc(e.who)}</span>`;
+      } else {
+        const isIn = e.type === "приход";
+        ic = `<span class="ic">${icon.user}</span>`;
+        txt = `<b>${esc(e.who)}</b> ${isIn ? "пришёл(ла)" : "ушёл(ла)"}` +
+          (isIn && e.late ? ` <span class="badge warn">${icon.warn}опоздание ${lateTxt(e.late)}</span>` : "");
+      }
+      return `<li>${ic}<span class="txt">${txt}</span><span class="t">${sameDay ? "" : short(d) + ", "}${t}</span></li>`;
+    }).join("");
+  }
+
+  function statusBadge(r) {
+    if (r.active) return `<span class="badge good"><span class="d"></span>на работе</span>`;
+    if (r.unclosed) return `<span class="badge crit">${icon.warn}уход не отмечен</span>`;
+    if (r.late) return `<span class="badge warn">${icon.warn}опоздание ${lateTxt(r.late)}</span>`;
+    return `<span class="badge"><span class="d"></span>вовремя</span>`;
+  }
+
+  function render(d) {
+    const v = d.visitors, days = d.day_list;
+    $("title").textContent = `Аптека ${d.branch}`;
+    $("updated").textContent = `обновлено в ${d.now.slice(0, 5)}`;
+    $("logCount").textContent = d.feed.length;
+    const single = days.length === 1;
+    const periodTxt = single ? dayLbl(days[0]) : `${short(days[0])} – ${short(days[days.length - 1])}`;
+
+    // --- обзор
+    $("o-inside").textContent = d.visitors_inside;
+    $("o-in").textContent = v.total;
+    $("o-in-sub").textContent = periodTxt;
+    $("o-out").textContent = v.exits;
+    $("o-peak").textContent = v.peak_hour == null ? "—" : hh(v.peak_hour);
+    $("o-peak-sub").textContent = v.peak_hour == null ? "нет данных" : `${v.by_hour[v.peak_hour]} чел. за час`;
+    $("o-staff").innerHTML = `${d.staff_present.length}<small> / ${d.staff_today_count}</small>`;
+    $("o-staff-sub").textContent = d.staff_present.length ? d.staff_present.join(", ") : "никого нет на месте";
+    $("o-today").textContent = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+
+    const hours = []; for (let h = 0; h < 24; h++) hours.push(h);
+    const act = hours.filter((h) => v.by_hour[h] || v.out_by_hour[h]);
+    const hFrom = Math.min(8, ...act), hTo = Math.max(22, ...act);
+    const hcats = hours.filter((h) => h >= hFrom && h <= hTo);
+    const hourSeries = [
+      { name: "Вход", color: "var(--in)", values: hcats.map((h) => v.by_hour[h] || 0) },
+      { name: "Выход", color: "var(--out)", values: hcats.map((h) => v.out_by_hour[h] || 0) },
+    ];
+    const hourTitle = (h) => `${hh(h)}–${String(h).padStart(2, "0")}:59`;
+    if (state.view === "overview") {
+      groupedBars($("c-hours"), hcats, hourSeries, (h) => h, hourTitle);
+      groupedBars($("c-days"), days, [
+        { name: "Вход", color: "var(--in)", values: days.map((x) => v.by_day[x] || 0) },
+        { name: "Выход", color: "var(--out)", values: days.map((x) => v.out_by_day[x] || 0) },
+      ], (x) => (days.length > 10 ? parse(x).getDate() : short(x)), dayLbl);
     }
 
-    loadAll();
-    setInterval(loadAll, 15000);
-  </script>
+    $("o-people").innerHTML = d.staff_live.length ? d.staff_live.map((p) => `
+      <div class="person">${ava(p.name)}
+        <div><div style="font-weight:600">${esc(p.name)}</div>
+          ${p.present ? `<span class="badge good"><span class="d"></span>на месте</span>` : `<span class="badge"><span class="d"></span>ушёл(ла)${p.last_out ? " в " + p.last_out : ""}</span>`}
+          ${p.late ? `<span class="badge warn">${icon.warn}${lateTxt(p.late)}</span>` : ""}
+        </div>
+        <div class="meta">с ${p.first_in || "—"}<b>${dur(p.worked_sec)}</b></div>
+      </div>`).join("") : `<div class="empty">Сегодня отметок пока нет</div>`;
+    $("o-feed").innerHTML = feedHtml(d.feed.slice(0, 8));
+
+    // --- клиенты
+    $("c-in").textContent = v.total;
+    $("c-out").textContent = v.exits;
+    $("c-avg").textContent = v.avg_per_day;
+    $("c-best").textContent = v.busiest_day ? short(v.busiest_day) : "—";
+    $("c-best-sub").textContent = v.busiest_day ? `${v.max_day} чел.` : "нет данных";
+    if (state.view === "clients") {
+      heatmap($("c-heat"), days, v.by_hour_day);
+      groupedBars($("c-hours2"), hcats, hourSeries, (h) => h, hourTitle);
+    }
+    $("c-table").innerHTML = days.slice().reverse().map((x) => {
+      const hd = v.by_hour_day[x] || {};
+      const pk = Object.keys(hd).sort((a, b) => hd[b] - hd[a])[0];
+      return `<tr><td>${esc(dayLbl(x))}</td><td class="r">${v.by_day[x] || 0}</td><td class="r">${v.out_by_day[x] || 0}</td><td class="r">${pk != null ? hh(pk) : "—"}</td></tr>`;
+    }).join("") + `<tr><td><b>Итого</b></td><td class="r"><b>${v.total}</b></td><td class="r"><b>${v.exits}</b></td><td></td></tr>`;
+
+    // --- сотрудники
+    const st = d.staff;
+    const totalH = st.reduce((s, x) => s + x.hours, 0);
+    const lates = st.reduce((s, x) => s + x.late_cnt, 0);
+    $("s-now").innerHTML = `${d.staff_present.length}<small> / ${d.staff_today_count}</small>`;
+    $("s-now-sub").textContent = d.staff_present.length ? d.staff_present.join(", ") : "никого нет на месте";
+    $("s-hours").innerHTML = `${Math.floor(totalH)}<small> ч ${String(Math.round((totalH % 1) * 60)).padStart(2, "0")} мин</small>`;
+    $("s-shifts").textContent = st.reduce((s, x) => s + x.days, 0);
+    $("s-late").textContent = lates;
+    $("s-late-sub").textContent = lates ? `всего ${lateTxt(st.reduce((s, x) => s + x.late_min, 0))}` : "все вовремя";
+    $("s-table").innerHTML = st.length ? st.map((x) => `<tr>
+        <td><span class="who">${ava(x.name)}${esc(x.name)}</span></td>
+        <td class="r">${x.days}</td><td class="r">${dur(x.hours * 3600)}</td><td class="r">${dur(x.avg_hours * 3600)}</td>
+        <td class="r">${x.late_cnt ? `<span class="badge warn">${icon.warn}${x.late_cnt}</span>` : "0"}</td></tr>`).join("")
+      : `<tr><td colspan="5" style="color:var(--muted)">За период отметок нет</td></tr>`;
+    const maxH = Math.max(0.01, ...st.map((x) => x.hours));
+    $("s-bars").innerHTML = st.length ? st.slice().sort((a, b) => b.hours - a.hours).map((x) => `
+      <div class="hb" title="${esc(x.name)}: ${dur(x.hours * 3600)}"><span class="n">${esc(x.name)}</span>
+        <div class="track"><div class="fill" style="width:${(x.hours / maxH) * 100}%"></div></div>
+        <span class="v">${x.hours.toFixed(1)} ч</span></div>`).join("") : `<div class="empty">Нет данных</div>`;
+    $("s-days").innerHTML = d.staff_days.length ? d.staff_days.map((r) => `<tr>
+        <td>${esc(dayLbl(r.date))}</td><td><span class="who">${ava(r.name)}${esc(r.name)}</span></td>
+        <td class="r">${r.first_in}</td><td class="r">${r.last_out || "—"}</td><td class="r">${dur(r.worked_sec)}</td>
+        <td>${statusBadge(r)}</td></tr>`).join("")
+      : `<tr><td colspan="6" style="color:var(--muted)">За период отметок нет</td></tr>`;
+
+    // --- журнал
+    $("l-feed").innerHTML = feedHtml(d.feed.filter((e) => state.filter === "all" || e.kind === state.filter));
+  }
+
+  // ---------- загрузка ----------
+  let timer = null, busy = false;
+  async function load() {
+    if (busy) return; busy = true;
+    try {
+      const r = await fetch(`/api/overview?from=${state.from}&to=${state.to}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("сервер ответил " + r.status);
+      state.data = await r.json();
+      $("err").style.display = "none";
+      $("pulse").classList.remove("stale");
+      render(state.data);
+    } catch (e) {
+      $("err").textContent = "Не удалось обновить данные: " + e.message + ". Программа учёта запущена?";
+      $("err").style.display = "block";
+      $("pulse").classList.add("stale");
+    } finally { busy = false; }
+    clearTimeout(timer);
+    timer = setTimeout(load, 15000); // живые цифры: раз в 15 сек
+  }
+
+  // ---------- события ----------
+  document.querySelectorAll(".bar .seg button").forEach((b) => b.addEventListener("click", () => setPreset(b.dataset.p)));
+  ["from", "to"].forEach((id) => $(id).addEventListener("change", () => {
+    if (!$("from").value || !$("to").value) return;
+    state.from = $("from").value; state.to = $("to").value;
+    if (state.from > state.to) [state.from, state.to] = [state.to, state.from];
+    state.preset = "custom"; markPreset(); load();
+  }));
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => show(t.dataset.v)));
+  document.querySelectorAll("#v-log .seg button").forEach((b) => b.addEventListener("click", () => {
+    state.filter = b.dataset.f;
+    document.querySelectorAll("#v-log .seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    if (state.data) render(state.data);
+  }));
+  $("excelBtn").addEventListener("click", async () => {
+    const url = `/api/excel?from=${state.from}&to=${state.to}`;
+    const r = await fetch(url, { method: "HEAD" }).catch(() => null);
+    if (r && r.status === 404) { alert("За этот период данных нет"); return; }
+    location.href = url;
+  });
+  $("themeBtn").addEventListener("click", () => {
+    const cur = document.documentElement.dataset.theme ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next; store.set("theme", next);
+    if (state.data) render(state.data);
+  });
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => state.data && render(state.data), 150); });
+
+  // ---------- старт ----------
+  const th = store.get("theme"); if (th) document.documentElement.dataset.theme = th;
+  const hv = location.hash.slice(1);
+  show(["overview", "clients", "staff", "log"].includes(hv) ? hv : "overview");
+  setPreset(store.get("preset") && store.get("preset") !== "custom" ? store.get("preset") : "today");
+})();
+</script>
+{% endraw %}
 </body>
 </html>

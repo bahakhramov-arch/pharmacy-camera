@@ -14,9 +14,10 @@ import threading
 from collections import defaultdict
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request, Response
+from flask import Flask, jsonify, render_template, request, Response, send_file
 
-from reports import build_days, read_events, read_visitors, visitor_stats, workday
+from reports import (build_days, make_report, read_events, read_visitors, visitor_stats,
+                     workday)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -96,16 +97,33 @@ def create_app(config):
             v_period["busiest_day"] = v_period["busiest_day"].isoformat()
 
         days = build_days(events, start, end, last_seen, now, config["day_start"])
-        agg = defaultdict(lambda: {"days": 0, "sec": 0.0, "late_cnt": 0})
+        agg = defaultdict(lambda: {"days": 0, "sec": 0.0, "late_cnt": 0, "late_min": 0})
         for (_, name), info in days.items():
             a = agg[name]
             a["days"] += 1
             a["sec"] += info["worked_sec"]
             if info["late"] > 0:
                 a["late_cnt"] += 1
+                a["late_min"] += info["late"]
         staff = [{"name": n, "days": a["days"], "hours": round(a["sec"] / 3600, 2),
-                  "late_cnt": a["late_cnt"]}
+                  "avg_hours": round(a["sec"] / 3600 / a["days"], 2) if a["days"] else 0,
+                  "late_cnt": a["late_cnt"], "late_min": a["late_min"]}
                  for n, a in sorted(agg.items())]
+        staff_days = [{
+            "date": d.isoformat(), "name": n,
+            "first_in": i["first_in"].strftime("%H:%M"),
+            "last_out": i["last_out"].strftime("%H:%M") if i["last_out"] and not i["active"] else None,
+            "worked_sec": i["worked_sec"], "late": i["late"],
+            "active": i["active"], "unclosed": i["unclosed"] and not i["active"],
+        } for (d, n), i in sorted(days.items(), key=lambda kv: (kv[0][0], kv[0][1]), reverse=True)]
+
+        feed = [{"when": e["when"].isoformat(), "kind": "staff", "who": e["name"], "type": e["type"],
+                 "late": e["late"]}
+                for e in events if start <= workday(e["when"], config["day_start"]) <= end]
+        feed += [{"when": v["when"].isoformat(), "kind": "client", "who": v["camera"],
+                  "type": v["type"]}
+                 for v in visits if start <= workday(v["when"], config["day_start"]) <= end]
+        feed = sorted(feed, key=lambda x: x["when"], reverse=True)[:60]
 
         today_days = build_days(events, today, today, last_seen, now, config["day_start"])
         live_rows = []
@@ -116,7 +134,10 @@ def create_app(config):
                 "name": n,
                 "present": n in present,
                 "first_in": info["first_in"].strftime("%H:%M") if info.get("first_in") else None,
+                "last_out": (info["last_out"].strftime("%H:%M")
+                             if info.get("last_out") and n not in present else None),
                 "worked_sec": info.get("worked_sec", 0),
+                "late": info.get("late", 0),
             })
 
         entered_live = live.get("visitors_today")
@@ -136,7 +157,30 @@ def create_app(config):
             "staff_present": sorted(present),
             "staff_today_count": len({n for (_, n) in today_days}),
             "staff_live": live_rows,
+            "staff_days": staff_days,
+            "feed": feed,
         })
+
+    @app.get("/api/excel")
+    @requires_auth
+    def excel():
+        """Тот же Excel, что присылает бот (сотрудники + лист «Клиенты»), за выбранный период."""
+        start, end, _ = parse_range()
+        now = dt.datetime.now()
+        folder = os.path.join(BASE_DIR, "reports")
+        os.makedirs(folder, exist_ok=True)
+        name = (f"Отчёт_{start:%Y-%m-%d}.xlsx" if start == end
+                else f"Отчёт_{start:%Y-%m-%d}_{end:%Y-%m-%d}.xlsx")
+        path = os.path.join(folder, name)
+        title = (f"Отчёт за {start:%d.%m.%Y}" if start == end
+                 else f"Отчёт за {start:%d.%m.%Y} – {end:%d.%m.%Y}") + f", филиал {config['branch']}"
+        ok = make_report(path, read_events(config["events_file"]), start, end, title,
+                         last_seen=_live().get("last_seen") or {}, now=now,
+                         day_start=config["day_start"],
+                         visits=read_visitors(config["visitors_file"]))
+        if not ok:
+            return jsonify({"error": "За этот период данных нет"}), 404
+        return send_file(path, as_attachment=True, download_name=name)
 
     @app.get("/api/health")
     def health():
