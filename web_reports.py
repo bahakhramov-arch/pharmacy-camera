@@ -55,7 +55,7 @@ def create_app(config):
             auth = request.authorization
             if not auth or not check_auth(auth.username, auth.password):
                 return Response("Нужна авторизация", 401,
-                                {"WWW-Authenticate": 'Basic realm="Отчёты"'})
+                                {"WWW-Authenticate": 'Basic realm="Apteka 5plus", charset="UTF-8"'})
             return f(*args, **kwargs)
         return decorated
 
