@@ -206,11 +206,19 @@ def create_app(config):
             return jsonify({"error": "Сначала задайте пароль сайта (REPORTS_PASSWORD в secrets.env) - "
                                      "без пароля менять настройки нельзя"}), 403
         data = request.get_json(silent=True) or {}
-        bad = [k for k in ("default_shift",) if k in data and not settings.norm_time(data[k])]
-        bad += [n for n, t in (data.get("shifts") or {}).items() if t and not settings.norm_time(t)]
+        bad = [k for k in ("default_shift", "default_end")
+               if k in data and not settings.norm_time(data[k])]
+        shifts = {}
+        for n, v in (data.get("shifts") or {}).items():
+            v = v if isinstance(v, dict) else {"start": v}
+            own = {k: v.get(k) for k in ("start", "end") if v.get(k)}
+            if any(not settings.norm_time(t) for t in own.values()):
+                bad.append(n)
+            elif own:
+                shifts[n] = own
         if bad:
             return jsonify({"error": "Неверное время: " + ", ".join(map(str, bad))}), 400
-        data["shifts"] = {n: t for n, t in (data.get("shifts") or {}).items() if t}
+        data["shifts"] = shifts
         return jsonify({"settings": settings.save(data)})
 
     @app.get("/api/health")

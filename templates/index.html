@@ -271,6 +271,10 @@
     padding: 8px 10px; font: inherit; color: var(--ink); max-width: 220px;
   }
   .form input:disabled, .shift-in:disabled { opacity: .6; }
+  .form .two { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 12px; }
+  .form .check { grid-template-columns: auto 1fr; align-items: start; gap: 10px; cursor: pointer; }
+  .form .check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+  .form .check small { display: block; margin-top: 2px; }
   .save-bar { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
   .sys { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
   .sys-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); }
@@ -485,17 +489,22 @@
       <div class="card">
         <div class="card-h"><h2>Общие правила</h2><span class="hint">для всех сотрудников</span></div>
         <div class="form">
-          <label>Начало смены по умолчанию<input type="time" id="setDefault" required></label>
+          <div class="two">
+            <label>Начало смены<input type="time" id="setDefault" required></label>
+            <label>Конец смены<input type="time" id="setEnd" required></label>
+          </div>
           <label>Допуск на опоздание, мин<input type="number" id="setGrace" min="0" max="120" required>
             <small id="setGraceHint"></small></label>
           <label>Уход, если не видно, мин<input type="number" id="setLeave" min="10" max="600" required>
             <small>Пока сотрудника нет на камерах меньше этого времени, это не уход, а перерыв.</small></label>
+          <label class="check"><input type="checkbox" id="setNotify">
+            <span>Итог в Telegram в конце смены<small>приход, опоздание, перерывы, ранний уход, отработано</small></span></label>
         </div>
       </div>
       <div class="card">
         <div class="card-h"><h2>Смены сотрудников</h2><span class="hint">пусто = как по умолчанию</span></div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Сотрудник</th><th>Начало смены</th><th></th></tr></thead>
+          <thead><tr><th>Сотрудник</th><th>Начало</th><th>Конец</th><th></th></tr></thead>
           <tbody id="setShifts"></tbody>
         </table></div>
       </div>
@@ -571,17 +580,23 @@
       const d = await r.json(), s = d.settings;
       canEdit = d.can_edit;
       $("setDefault").value = s.default_shift;
+      $("setEnd").value = s.default_end;
       $("setGrace").value = s.grace_minutes;
       $("setLeave").value = s.leave_timeout_min;
+      $("setNotify").checked = s.shift_end_notify;
       const own = s.shifts, low = d.employees.map((e) => e.toLowerCase());
       const names = d.employees.concat(Object.keys(own).filter((n) => !low.includes(n)));
-      $("setShifts").innerHTML = names.length ? names.map((n) => `<tr>
+      $("setShifts").innerHTML = names.length ? names.map((n) => {
+        const k = n.toLowerCase(), o = own[k] || {};
+        return `<tr>
           <td><span class="who">${ava(n)}${esc(n)}</span></td>
-          <td><input type="time" class="shift-in" data-n="${esc(n.toLowerCase())}" value="${esc(own[n.toLowerCase()] || "")}"></td>
-          <td><button class="btn icon reset" data-n="${esc(n.toLowerCase())}" title="Как по умолчанию" aria-label="Сбросить">✕</button></td>
-        </tr>`).join("") : `<tr><td colspan="3" style="color:var(--muted)">Сотрудники появятся, когда сайт запущен программой учёта</td></tr>`;
+          <td><input type="time" class="shift-in" data-n="${esc(k)}" data-f="start" value="${esc(o.start || "")}"></td>
+          <td><input type="time" class="shift-in" data-n="${esc(k)}" data-f="end" value="${esc(o.end || "")}"></td>
+          <td><button class="btn icon reset" data-n="${esc(k)}" title="Как по умолчанию" aria-label="Сбросить">✕</button></td>
+        </tr>`;
+      }).join("") : `<tr><td colspan="4" style="color:var(--muted)">Сотрудники появятся, когда сайт запущен программой учёта</td></tr>`;
       document.querySelectorAll("#setShifts .reset").forEach((b) => b.addEventListener("click", () => {
-        document.querySelector(`.shift-in[data-n="${b.dataset.n}"]`).value = "";
+        document.querySelectorAll(`.shift-in[data-n="${b.dataset.n}"]`).forEach((i) => { i.value = ""; });
       }));
       document.querySelectorAll("#v-settings input, #setSave").forEach((el) => { el.disabled = !canEdit; });
       $("setStatus").textContent = canEdit ? "" : "Чтобы менять настройки, задайте пароль сайта (REPORTS_PASSWORD в secrets.env).";
@@ -593,9 +608,12 @@
   }
   async function saveSettings() {
     const shifts = {};
-    document.querySelectorAll(".shift-in").forEach((i) => { if (i.value) shifts[i.dataset.n] = i.value; });
-    const body = { default_shift: $("setDefault").value, grace_minutes: Number($("setGrace").value),
-                   leave_timeout_min: Number($("setLeave").value), shifts };
+    document.querySelectorAll(".shift-in").forEach((i) => {
+      if (i.value) (shifts[i.dataset.n] = shifts[i.dataset.n] || {})[i.dataset.f] = i.value;
+    });
+    const body = { default_shift: $("setDefault").value, default_end: $("setEnd").value,
+                   grace_minutes: Number($("setGrace").value), leave_timeout_min: Number($("setLeave").value),
+                   shift_end_notify: $("setNotify").checked, shifts };
     $("setSave").disabled = true; $("setStatus").textContent = "Сохраняю…";
     try {
       const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

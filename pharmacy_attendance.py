@@ -741,28 +741,33 @@ def today_text(att):
 EMPLOYEES = []   # имена сотрудников (по файлам фото), заполняется в main()
 
 
+def _plus(t, minutes):
+    h, m = map(int, t.split(":"))
+    return (dt.datetime(2000, 1, 1, h, m) + dt.timedelta(minutes=minutes)).strftime("%H:%M")
+
+
 def shifts_text():
     s = settings.load()
     g = s["grace_minutes"]
-    h, m = map(int, s["default_shift"].split(":"))
-    until = (dt.datetime(2000, 1, 1, h, m) + dt.timedelta(minutes=g)).strftime("%H:%M")
     lines = [f"⏰ Смены, филиал {BRANCH}:",
-             f"По умолчанию: {s['default_shift']}",
-             f"Допуск на опоздание: {g} мин (до {until} - вовремя)",
-             f"Уход: если не видно {s['leave_timeout_min']} мин", ""]
-    names = sorted(set(EMPLOYEES) | {n for n in s["shifts"]
-                                     if n not in {e.lower() for e in EMPLOYEES}}, key=str.lower)
+             f"По умолчанию: {s['default_shift']}–{s['default_end']}",
+             f"Допуск на опоздание: {g} мин (до {_plus(s['default_shift'], g)} - вовремя)",
+             f"Уход: если не видно {s['leave_timeout_min']} мин",
+             "Итог в конце смены: " + ("включён" if s["shift_end_notify"] else "выключен"), ""]
+    low = {e.lower() for e in EMPLOYEES}
+    names = sorted(set(EMPLOYEES) | {n for n in s["shifts"] if n not in low}, key=str.lower)
     for n in names:
-        own = s["shifts"].get(n.lower())
-        lines.append(f"• {n} - {own}" if own else f"• {n} - {s['default_shift']} (по умолчанию)")
-    lines += ["", "Изменить:", "/smena Имя 09:00 - смена одному",
-              "/smena все 08:00 - по умолчанию для всех", "/smena Имя сброс - вернуть общую",
-              "/dopusk 10 - допуск, мин", "/uhod 60 - уход, мин"]
+        start, end = settings.shift_range(n)
+        own = " (по умолчанию)" if n.lower() not in s["shifts"] else ""
+        lines.append(f"• {n} - {start}–{end}{own}")
+    lines += ["", "Изменить:", "/smena Имя 08:00-17:00 - смена одному",
+              "/smena все 08:00-23:00 - по умолчанию для всех", "/smena Имя сброс - вернуть общую",
+              "/dopusk 10 - допуск, мин", "/uhod 60 - уход, мин", "/itog вкл | выкл - итог в конце смены"]
     return "\n".join(lines)
 
 
 def shift_command(cmd, args):
-    """/smena, /dopusk, /uhod -> текст ответа. Меняет settings.json, перезапуск не нужен."""
+    """/smena, /dopusk, /uhod, /itog -> текст ответа. Меняет settings.json, перезапуск не нужен."""
     s = settings.load()
     if cmd == "/dopusk":
         if not args or not args[0].isdigit() or not 0 <= int(args[0]) <= 120:
@@ -774,31 +779,124 @@ def shift_command(cmd, args):
             return "Пример: /uhod 60  (от 10 до 600 минут)"
         settings.update(leave_timeout_min=int(args[0]))
         return f"✅ Уход засчитывается, если не видно {int(args[0])} мин\n\n" + shifts_text()
-    # /smena Имя 09:00 | /smena все 08:00 | /smena Имя сброс
+    if cmd == "/itog":
+        val = (args[0].lower() if args else "")
+        if val not in ("вкл", "выкл", "on", "off"):
+            return "Пример: /itog вкл  или  /itog выкл"
+        on = val in ("вкл", "on")
+        settings.update(shift_end_notify=on)
+        return "✅ Итог в конце смены " + ("включён" if on else "выключен") + "\n\n" + shifts_text()
+    # /smena Имя 08:00-17:00 | /smena все 08:00-23:00 | /smena Имя сброс
     if len(args) < 2:
-        return "Пример: /smena Nurbonu 09:00  или  /smena все 08:00\n\n" + shifts_text()
+        return "Пример: /smena Nurbonu 08:00-23:00  или  /smena все 08:00-23:00\n\n" + shifts_text()
     name, value = " ".join(args[:-1]), args[-1]
+    rng = settings.parse_range(value)
     if name.lower() in ("все", "всем", "hammasi", "all", "default"):
-        t = settings.norm_time(value)
-        if not t:
-            return "Не понял время. Пример: /smena все 08:00"
-        settings.update(default_shift=t)
-        return f"✅ Смена по умолчанию: {t}\n\n" + shifts_text()
+        if not rng:
+            return "Не понял время. Пример: /smena все 08:00-23:00"
+        changes = {"default_shift": rng[0]}
+        if rng[1]:
+            changes["default_end"] = rng[1]
+        settings.update(**changes)
+        return f"✅ Смена по умолчанию: {rng[0]}–{rng[1] or s['default_end']}\n\n" + shifts_text()
     known = {e.lower(): e for e in EMPLOYEES}
     if name.lower() not in known and name.lower() not in s["shifts"]:
         return (f"Сотрудник «{name}» не найден. Имена - как у фото: "
                 + ", ".join(sorted(EMPLOYEES, key=str.lower)))
-    shifts = dict(s["shifts"])
+    shifts = {k: dict(v) for k, v in s["shifts"].items()}
+    shown = known.get(name.lower(), name)
     if value.lower() in ("сброс", "удалить", "нет", "reset", "-"):
         shifts.pop(name.lower(), None)
         settings.update(shifts=shifts)
-        return f"✅ {known.get(name.lower(), name)}: общая смена {s['default_shift']}\n\n" + shifts_text()
-    t = settings.norm_time(value)
-    if not t:
-        return "Не понял время. Пример: /smena Nurbonu 09:00"
-    shifts[name.lower()] = t
+        return f"✅ {shown}: общая смена {s['default_shift']}–{s['default_end']}\n\n" + shifts_text()
+    if not rng:
+        return "Не понял время. Пример: /smena Nurbonu 08:00-23:00  или  /smena Nurbonu 09:00"
+    own = shifts.get(name.lower(), {})
+    own["start"] = rng[0]
+    if rng[1]:
+        own["end"] = rng[1]
+    shifts[name.lower()] = own
     settings.update(shifts=shifts)
-    return f"✅ {known.get(name.lower(), name)}: смена с {t}\n\n" + shifts_text()
+    start, end = settings.shift_range(name)
+    return f"✅ {shown}: смена {start}–{end}\n\n" + shifts_text()
+
+
+def shift_summary(att, name, day, start, end):
+    """Итог смены сотрудника для Telegram; None, если он в этот день не приходил."""
+    evs = [e for e in read_events(LOG_FILE)
+           if e["name"] == name and workday(e["when"], DAY_START_HOUR) == day]
+    arrivals = [e for e in evs if e["type"] == "приход"]
+    if not arrivals:
+        return None
+    grace = settings.load()["grace_minutes"]
+    eh, em = map(int, end.split(":"))
+    end_dt = dt.datetime.combine(day, dt.time(eh, em))
+    if end <= start:
+        end_dt += dt.timedelta(days=1)          # ночная смена заканчивается на следующий день
+    first = arrivals[0]
+    notes = []
+    lines = [f"🏁 Смена закончилась: {name} ({start}–{end}), филиал {BRANCH}"]
+    if first["late"]:
+        lines.append(f"Пришёл(ла): {first['when']:%H:%M} - ⚠️ опоздание {first['late']} мин")
+        notes.append("опоздание")
+    else:
+        lines.append(f"Пришёл(ла): {first['when']:%H:%M} - вовремя ✅")
+    # перерывы: «уход» и следующий «приход» внутри дня
+    breaks, total = 0, 0.0
+    for prev, nxt in zip(evs, evs[1:]):
+        if prev["type"] == "уход" and nxt["type"] == "приход":
+            breaks += 1
+            total += (nxt["when"] - prev["when"]).total_seconds()
+    last = evs[-1]
+    present = name in att.present_snapshot()
+    seen = att.snapshot().get(name)
+    if last["type"] == "уход" and not present:
+        early = int((end_dt - last["when"]).total_seconds() // 60)
+        if early > grace:
+            lines.append(f"Ушёл(ла): {last['when']:%H:%M} - ⚠️ раньше конца смены на {fmt_dur(early * 60)}")
+            notes.append("ранний уход")
+        else:
+            lines.append(f"Ушёл(ла): {last['when']:%H:%M} ✅")
+    elif seen and (end_dt - seen).total_seconds() > 15 * 60:
+        # уход ещё не засчитан (ждём таймаут), но на камерах давно нет
+        lines.append(f"⚠️ Последний раз на камере в {seen:%H:%M}")
+        notes.append("нет на камерах")
+    else:
+        lines.append("На месте до конца смены ✅")
+    if breaks:
+        lines.append(f"Перерывы: {breaks}, всего {fmt_dur(total)}")
+        notes.append("перерывы")
+    else:
+        lines.append("Перерывов не было ✅")
+    info = build_days(evs, day, day, att.snapshot(), dt.datetime.now(), DAY_START_HOUR).get((day, name))
+    if info:
+        lines.append(f"Отработано: {fmt_dur(info['worked_sec'])}")
+    lines.append("Итог: ✅ вся смена без опозданий и уходов" if not notes
+                 else "Итог: ⚠️ " + ", ".join(notes))
+    return "\n".join(lines)
+
+
+def check_shift_ends(att, now, sent):
+    """В конце смены каждого сотрудника - итог в Telegram (один раз). True, если что-то отметили."""
+    if not settings.load()["shift_end_notify"]:
+        return False
+    d = workday(now, DAY_START_HOUR)
+    changed = False
+    for name in EMPLOYEES:
+        start, end = settings.shift_range(name)
+        eh, em = map(int, end.split(":"))
+        day = d - dt.timedelta(days=1) if end <= start else d   # ночная: началась вчера
+        end_dt = dt.datetime.combine(d, dt.time(eh, em))
+        key = f"shiftend:{day}:{name}:{start}-{end}"
+        if not end_dt <= now < end_dt + dt.timedelta(hours=3) or key in sent:
+            continue
+        sent[key] = 1
+        changed = True
+        text = shift_summary(att, name, day, start, end)
+        if text:
+            print(text)
+            send_telegram(text)
+    return changed
 
 
 def handle_command(text, att, visitors):
@@ -829,7 +927,7 @@ def handle_command(text, att, visitors):
         month_job(att, today.replace(day=1) - dt.timedelta(days=1))
     elif cmd == "/smeny":
         send_telegram(shifts_text(), wait=True)
-    elif cmd in ("/smena", "/dopusk", "/uhod"):
+    elif cmd in ("/smena", "/dopusk", "/uhod", "/itog"):
         send_telegram(shift_command(cmd, parts[1:]), wait=True)
     elif cmd in ("/start", "/help"):
         send_telegram("Команды:\n/today - кто сегодня на работе\n"
@@ -838,7 +936,7 @@ def handle_command(text, att, visitors):
                       "/yesterday - Excel за вчера\n"
                       "/week - Excel за текущую неделю\n/prevweek - за прошлую неделю\n"
                       "/month - Excel за текущий месяц\n/prevmonth - за прошлый месяц\n"
-                      "/smeny - смены и как их менять (/smena, /dopusk, /uhod)",
+                      "/smeny - смены и как их менять (/smena, /dopusk, /uhod, /itog)",
                       wait=True)
 
 
@@ -902,6 +1000,8 @@ def check_schedule(att, visitors, now, sent):
         sent[day_key] = 1
         changed = True
         send_telegram("🌙 Итог дня\n" + today_text(att) + "\n\n" + visitors_text(visitors))
+    if check_shift_ends(att, now, sent):
+        changed = True
     if changed:
         # ключи «week:ДАТА», «month:ДАТА», «day:ДАТА:ВРЕМЯ» - дата всегда второе поле
         old = (d - dt.timedelta(days=40)).isoformat()
