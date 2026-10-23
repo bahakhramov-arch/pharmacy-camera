@@ -155,9 +155,8 @@ def create_app(config):
             "visitors_today": visitors_today,
             "visitors_inside": live.get("visitors_inside", 0),
             "visitors_exited": live.get("visitors_exited", v_today["exits"]),
-            # посетители за период = вышедшие (+ кто сейчас внутри, если период включает сегодня)
-            "visitors_people": v_period["visitors"]
-                               + (live.get("visitors_inside", 0) if start <= today <= end else 0),
+            # посетители за период = вышедшие (выходы сверены с кассой)
+            "visitors_people": v_period["visitors"],
             "visitors": v_period,
             "day_list": [d.isoformat() for d in _day_list(start, end)],
             "staff": staff,

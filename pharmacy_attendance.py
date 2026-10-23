@@ -718,13 +718,12 @@ def visitors_text(visitors):
     now = dt.datetime.now()
     d = workday(now, DAY_START_HOUR)
     st = visitor_stats(read_visitors(VISITORS_FILE), d, d, DAY_START_HOUR)
-    # посетители = вышедшие + кто ещё внутри (см. visitor_stats: выходы сверены с кассой)
-    inside = visitors.counts()[2]
+    # посетители = вышедшие (см. visitor_stats: выходы сверены с кассой).
+    # «Сейчас в аптеке» не показываем: уличная камера не видит зал, оценка всегда 0.
     peak = st["v_peak_hour"]
     peak_s = (f"{peak:02d}:00 ({st['out_by_hour'][peak]} чел.)" if peak is not None else "нет данных")
     return (f"👥 Посетители сегодня, {d:%d.%m.%Y}, филиал {BRANCH}:\n"
-            f"Посетителей: {st['visitors'] + inside}\n"
-            f"Сейчас в аптеке: ≈{inside}\n"
+            f"Посетителей: {st['visitors']}\n"
             f"Час пик: {peak_s}")
 
 
@@ -1164,9 +1163,9 @@ def main():
                 if SHOW_WINDOW:
                     if door:
                         door.draw(frame)
-                        _, n_out, inside = visitors.counts()
-                        # как на сайте: посетители = вышедшие + кто внутри
-                        cv2.putText(frame, f"visitors: {n_out + inside}  inside: {inside}  "
+                        _, n_out, _ = visitors.counts()
+                        # как на сайте: посетители = вышедшие
+                        cv2.putText(frame, f"visitors: {n_out}  "
                                            f"door fps: {door_workers[r.name].fps:.1f}",
                                     (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                     cv2.imshow(ascii_label(r.name), frame)

@@ -340,11 +340,6 @@
   <section class="view" id="v-overview">
     <div class="tiles">
       <div class="tile hero">
-        <div class="lbl">Сейчас в аптеке</div>
-        <div class="val num" id="o-inside">—</div>
-        <div class="sub">оценка по двери, сейчас</div>
-      </div>
-      <div class="tile">
         <div class="lbl">Посетителей</div>
         <div class="val num" id="o-in">—</div>
         <div class="sub" id="o-in-sub">за период</div>
@@ -671,7 +666,6 @@
     const periodTxt = single ? dayLbl(days[0]) : `${short(days[0])} – ${short(days[days.length - 1])}`;
 
     // --- обзор
-    $("o-inside").textContent = d.visitors_inside;
     // Посетители считаются по выходам (сверено с кассой), сегодня + кто ещё внутри
     $("o-in").textContent = d.visitors_people;
     $("o-in-sub").textContent = periodTxt;
