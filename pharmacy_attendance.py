@@ -576,7 +576,9 @@ class Attendance:
             print("После перезапуска считаются на месте: " + ", ".join(sorted(self.present)))
 
     def _late(self, name, now):
-        h, m = map(int, SHIFTS.get(name, DEFAULT_SHIFT).split(":"))
+        # имя - из файла фото; регистр не важен (на Dell «Nurbonu.jpg», в настройке «nurbonu»)
+        shift = {k.lower(): v for k, v in SHIFTS.items()}.get(name.lower(), DEFAULT_SHIFT)
+        h, m = map(int, shift.split(":"))
         shift_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
         # Берём ближайшую к «сейчас» смену: так работает и для ночных смен
         # (пришёл в 21:05 к смене 21:00; пришёл в 08:50 к смене 09:00 - не опоздал).
