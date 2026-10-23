@@ -138,7 +138,7 @@ DOOR_DETECT_INTERVAL_SEC = 0.2         # ~5 кадров/сек на камер�
 REPORTS_DIR = "reports"
 AUTO_REPORT_TIME = "08:00"             # понедельник: отчёт за прошлую неделю,
                                        # 1-е число: за прошлый месяц
-DAILY_SUMMARY_TIME = "23:15"           # итог дня в Telegram, после закрытия в 23:00 ("" = выключить)
+DAILY_SUMMARY_TIME = "23:00"           # итог дня в Telegram, при закрытии аптеки ("" = выключить)
 REPORTS_WEB = True                     # сайт отчётов в браузере
 REPORTS_HOST = os.environ.get("REPORTS_HOST", "0.0.0.0")
 REPORTS_PORT = int(os.environ.get("REPORTS_PORT", "8080"))
@@ -834,12 +834,16 @@ def check_schedule(att, visitors, now, sent):
             changed = True
             prev = d - dt.timedelta(days=1)
             threading.Thread(target=month_job, args=(att, prev), daemon=True).start()
-    if DAILY_SUMMARY_TIME and hhmm >= DAILY_SUMMARY_TIME and f"day:{d}" not in sent:
-        sent[f"day:{d}"] = 1
+    # в ключе - время отправки: если время поменяли, итог придёт и в тот же день по-новому
+    day_key = f"day:{d}:{DAILY_SUMMARY_TIME}"
+    if DAILY_SUMMARY_TIME and hhmm >= DAILY_SUMMARY_TIME and day_key not in sent:
+        sent[day_key] = 1
         changed = True
         send_telegram("🌙 Итог дня\n" + today_text(att) + "\n\n" + visitors_text(visitors))
     if changed:
-        for k in [k for k in sent if k[-10:] < (d - dt.timedelta(days=40)).isoformat()]:
+        # ключи «week:ДАТА», «month:ДАТА», «day:ДАТА:ВРЕМЯ» - дата всегда второе поле
+        old = (d - dt.timedelta(days=40)).isoformat()
+        for k in [k for k in sent if k.split(":")[1][:10] < old]:
             del sent[k]
         save_json(REPORT_STATE_FILE, sent)
 
