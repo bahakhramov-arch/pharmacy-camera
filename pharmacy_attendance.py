@@ -546,6 +546,35 @@ class Attendance:
                 w.writerow([when.date().isoformat(), when.strftime("%H:%M:%S"),
                             name, BRANCH, kind, late])
 
+    def fix_arrival(self, name, when):
+        """Исправить приход за день: записи сотрудника этого дня раньше when убираются,
+        в when ставится «приход» (опоздание по текущим правилам). Возвращает (убрано, опоздание)."""
+        day = workday(when, DAY_START_HOUR)
+        late = self._late(name, when)
+        with self.log_lock:
+            with open(LOG_FILE, encoding="utf-8-sig", newline="") as f:
+                rows = list(csv.reader(f))
+            head, body = rows[:1], rows[1:]
+            keep, removed = [], 0
+            for r in body:
+                if len(r) >= 5 and r[2].lower() == name.lower():
+                    try:
+                        t = dt.datetime.strptime(f"{r[0]} {r[1]}", "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        keep.append(r)
+                        continue
+                    if workday(t, DAY_START_HOUR) == day and t < when:
+                        removed += 1
+                        continue
+                keep.append(r)
+            keep.append([when.date().isoformat(), when.strftime("%H:%M:%S"), name, BRANCH, "приход", late])
+            keep.sort(key=lambda r: (r[0], r[1]) if len(r) > 1 else ("", ""))
+            tmp = LOG_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+                csv.writer(f).writerows(head + keep)
+            os.replace(tmp, LOG_FILE)
+        return removed, late
+
     def snapshot(self):
         with self.lock:
             return dict(self.last_seen)
@@ -604,6 +633,13 @@ class Attendance:
     def seen(self, name, now):
         """Вызывается, когда сотрудник уверенно распознан."""
         with self.lock:
+            # новый приход - только в окне смены (ночью камеру может обмануть уборщица,
+            # охранник, отражение). Кто уже на месте и задержался - считается как обычно.
+            if name not in self.present and not settings.arrival_allowed(name, now):
+                if time.time() - self._quiet.get(("off", name), 0) > 600:
+                    self._quiet[("off", name)] = time.time()
+                    print(f"{name}: распознан(а) в {now:%H:%M} - вне смены, приход не засчитан")
+                return
             self.last_seen[name] = now
             if name in self.present:
                 if time.time() - self._quiet.get(name, 0) > 300:
@@ -655,9 +691,10 @@ class Attendance:
             self._depart(n, ls)
 
     def new_day(self, now):
-        """Смена рабочего дня. Тех, кто прямо сейчас в кадре (работает через границу
-        дня), молча переносим в новый день: уход в 23:59:59 и приход в 00:00:00.
-        Остальных закрываем по последней отметке."""
+        """Смена рабочего дня. Ночную смену (конец раньше начала), если человек прямо
+        сейчас в кадре, молча переносим в новый день: уход в 23:59:59 и приход в 00:00:00.
+        Остальных закрываем по последней отметке: дневной смене в 00:00 «приход» не нужен -
+        люди, выходящие из аптеки в полночь, иначе получали приход нового дня."""
         boundary = (dt.datetime.combine(workday(now, DAY_START_HOUR), dt.time())
                     + dt.timedelta(hours=DAY_START_HOUR))
         with self.lock:
@@ -665,7 +702,8 @@ class Attendance:
         carry = []
         for n in names:
             ls = self.last_seen.get(n, now)
-            if (now - ls).total_seconds() <= 60:
+            start, end = settings.shift_range(n)
+            if end <= start and (now - ls).total_seconds() <= 60:
                 carry.append(n)
             else:
                 self._depart(n, ls)
@@ -915,6 +953,35 @@ def check_shift_ends(att, now, sent):
     return changed
 
 
+def prihod_command(att, args, today):
+    """/prihod Имя ЧЧ:ММ [ДД.ММ] - исправить время прихода (например, ложный ночной приход)."""
+    usage = "Пример: /prihod Nurbonu 07:00  (сегодня)  или  /prihod Nurbonu 07:00 23.10"
+    if len(args) < 2:
+        return usage
+    known = {e.lower(): e for e in EMPLOYEES}
+    name = known.get(args[0].lower())
+    if not name:
+        return (f"Сотрудник «{args[0]}» не найден. Имена - как у фото: "
+                + ", ".join(sorted(EMPLOYEES, key=str.lower)))
+    t = settings.norm_time(args[1])
+    d = parse_day(args[2] if len(args) > 2 else "", today)
+    if not t or d is None:
+        return usage
+    h, m = map(int, t.split(":"))
+    when = dt.datetime.combine(d, dt.time(h, m))
+    if when > dt.datetime.now():
+        return "Это время ещё не наступило."
+    removed, late = att.fix_arrival(name, when)
+    info = build_days(read_events(LOG_FILE), d, d, att.snapshot(), dt.datetime.now(),
+                      DAY_START_HOUR).get((d, name))
+    text = (f"✅ {name}, {d:%d.%m}: приход исправлен на {t}"
+            + (f" (опоздание {late} мин)" if late else " - вовремя")
+            + f"\nУбрано ошибочных записей до {t}: {removed}")
+    if info:
+        text += f"\nОтработано за день: {fmt_dur(info['worked_sec'])}"
+    return text
+
+
 def handle_command(text, att, visitors):
     if not text.startswith("/"):
         return
@@ -943,6 +1010,8 @@ def handle_command(text, att, visitors):
         month_job(att, today.replace(day=1) - dt.timedelta(days=1))
     elif cmd == "/smeny":
         send_telegram(shifts_text(), wait=True)
+    elif cmd == "/prihod":
+        send_telegram(prihod_command(att, parts[1:], today), wait=True)
     elif cmd in ("/smena", "/dopusk", "/uhod", "/itog"):
         send_telegram(shift_command(cmd, parts[1:]), wait=True)
     elif cmd in ("/start", "/help"):
@@ -952,7 +1021,8 @@ def handle_command(text, att, visitors):
                       "/yesterday - Excel за вчера\n"
                       "/week - Excel за текущую неделю\n/prevweek - за прошлую неделю\n"
                       "/month - Excel за текущий месяц\n/prevmonth - за прошлый месяц\n"
-                      "/smeny - смены и как их менять (/smena, /dopusk, /uhod, /itog)",
+                      "/smeny - смены и как их менять (/smena, /dopusk, /uhod, /itog)\n"
+                      "/prihod Имя 07:00 - исправить время прихода",
                       wait=True)
 
 

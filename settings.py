@@ -19,6 +19,7 @@ DEFAULTS = {
     "default_end": "23:00",         # конец смены по умолчанию
     "grace_minutes": 10,            # допуск: опоздание, если позже на > N минут
     "leave_timeout_min": 60,        # не виден дольше N минут = ушёл
+    "early_minutes": 60,            # приход засчитывается не раньше чем за N минут до начала смены (08:00 -> с 07:00)
     "shift_end_notify": True,       # в конце смены прислать итог по сотруднику в Telegram
     # своя смена: имя (как у фото, без регистра) -> {"start": "ЧЧ:ММ", "end": "ЧЧ:ММ"}
     "shifts": {"nurbonu": {"start": "08:00", "end": "23:00"}},
@@ -59,7 +60,8 @@ def _clean(data):
         data = {}
     for key in ("default_shift", "default_end"):
         out[key] = norm_time(data.get(key, DEFAULTS[key])) or DEFAULTS[key]
-    for key, lo, hi in (("grace_minutes", 0, 120), ("leave_timeout_min", 10, 600)):
+    for key, lo, hi in (("grace_minutes", 0, 120), ("leave_timeout_min", 10, 600),
+                        ("early_minutes", 0, 720)):
         try:
             v = int(data.get(key, DEFAULTS[key]))
             out[key] = v if lo <= v <= hi else DEFAULTS[key]
@@ -127,3 +129,18 @@ def shift_range(name):
 
 def shift_for(name):
     return shift_range(name)[0]
+
+
+def arrival_allowed(name, when):
+    """Можно ли засчитать новый приход в момент when: от (начало - early_minutes) до конца смены.
+    Ночью камера может принять за сотрудника охранника, уборщицу или отражение - такой
+    «приход» в 00:03 при смене 08:00-23:00 не засчитываем. Ночные смены (конец <= начала)
+    тоже работают: окно идёт через полночь."""
+    start, end = shift_range(name)
+    sh, sm = map(int, start.split(":"))
+    eh, em = map(int, end.split(":"))
+    s_min, e_min = sh * 60 + sm, eh * 60 + em
+    w_from = (s_min - load()["early_minutes"]) % 1440
+    span = (e_min - w_from) % 1440 or 1440
+    now = when.hour * 60 + when.minute
+    return (now - w_from) % 1440 <= span
