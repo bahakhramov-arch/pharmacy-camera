@@ -57,12 +57,18 @@ def read_visitors(log_file):
 
 def visitor_stats(visits, start, end, day_start=0):
     """Сводка по посетителям: по дням, по часам, всего за период.
-    total / by_* - входы (сколько человек зашло); exits / out_by_* - выходы."""
+
+    total / by_* - входы; exits / out_by_* - выходы (сырые счётчики двери).
+    visitors / v_* - ПОСЕТИТЕЛИ, считаются по выходам: каждый клиент выходит один раз,
+    а выход камера видит надёжнее входа (зал - край кадра, вечером стекло тёмное).
+    Проверено по кассе: 23.10.2026 - 230 выходов при 230 чеках (входов насчитано 196).
+    Кто ещё внутри, добавляет к сегодняшнему дню вызывающий код (живой счётчик)."""
     by_day = defaultdict(int)
     by_hour = defaultdict(int)
     by_hour_day = defaultdict(lambda: defaultdict(int))
     out_by_day = defaultdict(int)
     out_by_hour = defaultdict(int)
+    out_by_hour_day = defaultdict(lambda: defaultdict(int))
     total = exits = 0
     for v in visits:
         d = workday(v["when"], day_start)
@@ -71,6 +77,7 @@ def visitor_stats(visits, start, end, day_start=0):
         if v["type"] == "выход":
             out_by_day[d] += 1
             out_by_hour[v["when"].hour] += 1
+            out_by_hour_day[d][v["when"].hour] += 1
             exits += 1
         else:
             by_day[d] += 1
@@ -80,6 +87,8 @@ def visitor_stats(visits, start, end, day_start=0):
     days_n = max(1, (end - start).days + 1)
     peak_hour = max(by_hour, key=by_hour.get) if by_hour else None
     busiest_day = max(by_day, key=by_day.get) if by_day else None
+    v_peak = max(out_by_hour, key=out_by_hour.get) if out_by_hour else None
+    v_busiest = max(out_by_day, key=out_by_day.get) if out_by_day else None
     return {
         "total": total,
         "exits": exits,
@@ -89,9 +98,16 @@ def visitor_stats(visits, start, end, day_start=0):
         "by_hour": {h: by_hour.get(h, 0) for h in range(24)},
         "out_by_hour": {h: out_by_hour.get(h, 0) for h in range(24)},
         "by_hour_day": {d: dict(hours) for d, hours in by_hour_day.items()},
+        "out_by_hour_day": {d: dict(hours) for d, hours in out_by_hour_day.items()},
         "peak_hour": peak_hour,
         "busiest_day": busiest_day,
         "max_day": by_day.get(busiest_day, 0) if busiest_day else 0,
+        # посетители (по выходам)
+        "visitors": exits,
+        "v_avg_per_day": round(exits / days_n, 1),
+        "v_peak_hour": v_peak,
+        "v_busiest_day": v_busiest,
+        "v_max_day": out_by_day.get(v_busiest, 0) if v_busiest else 0,
     }
 
 
@@ -346,32 +362,31 @@ def _staff_sheets(wb, days, start, end, title, now):
 
 
 def _clients_sheet(ws, st, start, end, title, now):
-    """Лист «Клиенты»: итог за период, по дням и по часам (вход / выход)."""
+    """Лист «Клиенты»: посетители за период, по дням и по часам (считаются по выходам)."""
     ws["A1"] = f"Клиенты. {title}"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = (f"Сформирован: {(now or dt.datetime.now()):%d.%m.%Y %H:%M}. "
-                f"Подсчёт по линии у двери; «внутри» = вход − выход (оценка).")
+                "Посетители считаются по выходам через дверь (сверено с кассой: 23.10.2026 - "
+                "230 выходов при 230 чеках).")
     ws["A2"].font = Font(italic=True, color="666666")
 
-    peak = st["peak_hour"]
-    busiest = st["busiest_day"]
-    _head(ws, 4, ["Зашло", "Вышло", "В среднем за день (вход)", "Час пик",
-                  "Самый загруженный день"])
+    peak = st["v_peak_hour"]
+    busiest = st["v_busiest_day"]
+    _head(ws, 4, ["Посетителей", "В среднем за день", "Час пик", "Самый загруженный день"])
     ws.row_dimensions[4].height = 32
-    vals = [st["total"], st["exits"], st["avg_per_day"],
-            f"{peak:02d}:00 ({st['by_hour'][peak]} чел.)" if peak is not None else "—",
-            f"{busiest:%d.%m.%Y} ({st['max_day']} чел.)" if busiest else "—"]
+    vals = [st["visitors"], st["v_avg_per_day"],
+            f"{peak:02d}:00 ({st['out_by_hour'][peak]} чел.)" if peak is not None else "—",
+            f"{busiest:%d.%m.%Y} ({st['v_max_day']} чел.)" if busiest else "—"]
     for i, v in enumerate(vals, start=1):
         c = ws.cell(row=5, column=i, value=v)
         c.border, c.alignment, c.font = _BORDER, _CENTER, Font(bold=True)
 
     # --- по дням
-    _head(ws, 7, ["Дата", "День", "Зашло", "Вышло", "Разница"])
+    _head(ws, 7, ["Дата", "День", "Посетителей"])
     r = 8
     d = start
     while d <= end:
-        n_in, n_out = st["by_day"].get(d, 0), st["out_by_day"].get(d, 0)
-        for i, v in enumerate([d, WEEKDAYS[d.weekday()], n_in, n_out, n_in - n_out], start=1):
+        for i, v in enumerate([d, WEEKDAYS[d.weekday()], st["out_by_day"].get(d, 0)], start=1):
             c = ws.cell(row=r, column=i, value=v)
             c.border = _BORDER
             if i == 1:
@@ -382,36 +397,35 @@ def _clients_sheet(ws, st, start, end, title, now):
                 c.fill = _WEEKEND_FILL
         r += 1
         d += dt.timedelta(days=1)
-    for i, v in enumerate(["ИТОГО", "", st["total"], st["exits"], st["total"] - st["exits"]],
-                          start=1):
+    for i, v in enumerate(["ИТОГО", "", st["visitors"]], start=1):
         c = ws.cell(row=r, column=i, value=v)
         c.font, c.fill, c.border = Font(bold=True), _TOTAL_FILL, _BORDER
         if i > 1:
             c.alignment = Alignment(horizontal="center")
 
     # --- по часам (справа от таблицы по дням)
-    for i, v in enumerate(["Час", "Зашло", "Вышло"], start=7):
+    for i, v in enumerate(["Час", "Посетителей"], start=5):
         c = ws.cell(row=7, column=i, value=v)
         c.fill, c.font, c.alignment, c.border = _HEAD_FILL, _HEAD_FONT, _CENTER, _BORDER
-    hours = [h for h in range(24) if st["by_hour"][h] or st["out_by_hour"][h]]
+    hours = [h for h in range(24) if st["out_by_hour"][h]]
     for k, h in enumerate(hours):
-        for i, v in enumerate([f"{h:02d}:00–{h:02d}:59", st["by_hour"][h],
-                               st["out_by_hour"][h]], start=7):
+        for i, v in enumerate([f"{h:02d}:00–{h:02d}:59", st["out_by_hour"][h]], start=5):
             c = ws.cell(row=8 + k, column=i, value=v)
             c.border, c.alignment = _BORDER, Alignment(horizontal="center")
             if h == peak:
                 c.fill = _TOTAL_FILL
     if hours:
         chart = BarChart()
-        chart.title = "Клиенты по часам"
+        chart.title = "Посетители по часам"
         chart.y_axis.title = "человек"
-        chart.add_data(Reference(ws, min_col=8, max_col=9, min_row=7, max_row=7 + len(hours)),
+        chart.legend = None
+        chart.add_data(Reference(ws, min_col=6, max_col=6, min_row=7, max_row=7 + len(hours)),
                        titles_from_data=True)
-        chart.set_categories(Reference(ws, min_col=7, min_row=8, max_row=7 + len(hours)))
+        chart.set_categories(Reference(ws, min_col=5, min_row=8, max_row=7 + len(hours)))
         chart.height, chart.width = 8, 18
-        ws.add_chart(chart, "K7")
+        ws.add_chart(chart, "H7")
 
-    _widths(ws, [14, 12, 16, 16, 24, 3, 14, 10, 10])
+    _widths(ws, [14, 18, 16, 24, 14, 14])
     ws.freeze_panes = "A6"
 
 

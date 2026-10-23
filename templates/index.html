@@ -342,17 +342,12 @@
       <div class="tile hero">
         <div class="lbl">Сейчас в аптеке</div>
         <div class="val num" id="o-inside">—</div>
-        <div class="sub">оценка: вошло − вышло сегодня</div>
+        <div class="sub">оценка по двери, сейчас</div>
       </div>
       <div class="tile">
-        <div class="lbl"><i class="key" style="background:var(--in)"></i>Зашло клиентов</div>
+        <div class="lbl">Посетителей</div>
         <div class="val num" id="o-in">—</div>
         <div class="sub" id="o-in-sub">за период</div>
-      </div>
-      <div class="tile">
-        <div class="lbl"><i class="key" style="background:var(--out)"></i>Вышло</div>
-        <div class="val num" id="o-out">—</div>
-        <div class="sub">за период</div>
       </div>
       <div class="tile">
         <div class="lbl">Час пик</div>
@@ -369,8 +364,7 @@
     <div class="grid g-2">
       <div class="card">
         <div class="card-h">
-          <h2>Клиенты по часам</h2>
-          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
+          <h2>Посетители по часам</h2>
         </div>
         <div class="chart" id="c-hours"></div>
       </div>
@@ -383,8 +377,7 @@
     <div class="grid g-2">
       <div class="card">
         <div class="card-h">
-          <h2>Клиенты по дням</h2>
-          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
+          <h2>Посетители по дням</h2>
         </div>
         <div class="chart" id="c-days"></div>
       </div>
@@ -405,9 +398,9 @@
   <!-- ================= КЛИЕНТЫ ================= -->
   <section class="view" id="v-clients">
     <div class="tiles">
-      <div class="tile"><div class="lbl"><i class="key" style="background:var(--in)"></i>Зашло</div><div class="val num" id="c-in">—</div><div class="sub">за период</div></div>
-      <div class="tile"><div class="lbl"><i class="key" style="background:var(--out)"></i>Вышло</div><div class="val num" id="c-out">—</div><div class="sub">за период</div></div>
-      <div class="tile"><div class="lbl">В среднем за день</div><div class="val num" id="c-avg">—</div><div class="sub">входов</div></div>
+      <div class="tile"><div class="lbl">Посетителей</div><div class="val num" id="c-in">—</div><div class="sub">за период</div></div>
+      <div class="tile"><div class="lbl">Час пик</div><div class="val num" id="c-out">—</div><div class="sub" id="c-out-sub">—</div></div>
+      <div class="tile"><div class="lbl">В среднем за день</div><div class="val num" id="c-avg">—</div><div class="sub">посетителей</div></div>
       <div class="tile"><div class="lbl">Самый загруженный день</div><div class="val num" id="c-best">—</div><div class="sub" id="c-best-sub">—</div></div>
     </div>
     <div class="grid">
@@ -423,13 +416,12 @@
       <div class="card">
         <div class="card-h">
           <h2>По часам</h2>
-          <div class="legend"><span><i class="key" style="background:var(--in)"></i>Вход</span><span><i class="key" style="background:var(--out)"></i>Выход</span></div>
         </div>
         <div class="chart" id="c-hours2"></div>
       </div>
       <div class="card">
         <div class="card-h"><h2>Таблица по дням</h2></div>
-        <div class="tbl-wrap"><table><thead><tr><th>Дата</th><th class="r">Зашло</th><th class="r">Вышло</th><th class="r">Час пик</th></tr></thead><tbody id="c-table"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Дата</th><th class="r">Посетителей</th><th class="r">Час пик</th></tr></thead><tbody id="c-table"></tbody></table></div>
       </div>
     </div>
   </section>
@@ -680,29 +672,27 @@
 
     // --- обзор
     $("o-inside").textContent = d.visitors_inside;
-    $("o-in").textContent = v.total;
+    // Посетители считаются по выходам (сверено с кассой), сегодня + кто ещё внутри
+    $("o-in").textContent = d.visitors_people;
     $("o-in-sub").textContent = periodTxt;
-    $("o-out").textContent = v.exits;
-    $("o-peak").textContent = v.peak_hour == null ? "—" : hh(v.peak_hour);
-    $("o-peak-sub").textContent = v.peak_hour == null ? "нет данных" : `${v.by_hour[v.peak_hour]} чел. за час`;
+    $("o-peak").textContent = v.v_peak_hour == null ? "—" : hh(v.v_peak_hour);
+    $("o-peak-sub").textContent = v.v_peak_hour == null ? "нет данных" : `${v.out_by_hour[v.v_peak_hour]} чел. за час`;
     $("o-staff").innerHTML = `${d.staff_present.length}<small> / ${d.staff_today_count}</small>`;
     $("o-staff-sub").textContent = d.staff_present.length ? d.staff_present.join(", ") : "никого нет на месте";
     $("o-today").textContent = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 
     const hours = []; for (let h = 0; h < 24; h++) hours.push(h);
-    const act = hours.filter((h) => v.by_hour[h] || v.out_by_hour[h]);
+    const act = hours.filter((h) => v.out_by_hour[h]);
     const hFrom = Math.min(8, ...act), hTo = Math.max(22, ...act);
     const hcats = hours.filter((h) => h >= hFrom && h <= hTo);
     const hourSeries = [
-      { name: "Вход", color: "var(--in)", values: hcats.map((h) => v.by_hour[h] || 0) },
-      { name: "Выход", color: "var(--out)", values: hcats.map((h) => v.out_by_hour[h] || 0) },
+      { name: "Посетители", color: "var(--in)", values: hcats.map((h) => v.out_by_hour[h] || 0) },
     ];
     const hourTitle = (h) => `${hh(h)}–${String(h).padStart(2, "0")}:59`;
     if (state.view === "overview") {
       groupedBars($("c-hours"), hcats, hourSeries, (h) => h, hourTitle);
       groupedBars($("c-days"), days, [
-        { name: "Вход", color: "var(--in)", values: days.map((x) => v.by_day[x] || 0) },
-        { name: "Выход", color: "var(--out)", values: days.map((x) => v.out_by_day[x] || 0) },
+        { name: "Посетители", color: "var(--in)", values: days.map((x) => v.out_by_day[x] || 0) },
       ], (x) => (days.length > 10 ? parse(x).getDate() : short(x)), dayLbl);
     }
 
@@ -719,20 +709,21 @@
     renderSystem(d.system);
 
     // --- клиенты
-    $("c-in").textContent = v.total;
-    $("c-out").textContent = v.exits;
-    $("c-avg").textContent = v.avg_per_day;
-    $("c-best").textContent = v.busiest_day ? short(v.busiest_day) : "—";
-    $("c-best-sub").textContent = v.busiest_day ? `${v.max_day} чел.` : "нет данных";
+    $("c-in").textContent = d.visitors_people;
+    $("c-out").textContent = v.v_peak_hour == null ? "—" : hh(v.v_peak_hour);
+    $("c-out-sub").textContent = v.v_peak_hour == null ? "нет данных" : `${v.out_by_hour[v.v_peak_hour]} чел. за час`;
+    $("c-avg").textContent = v.v_avg_per_day;
+    $("c-best").textContent = v.v_busiest_day ? short(v.v_busiest_day) : "—";
+    $("c-best-sub").textContent = v.v_busiest_day ? `${v.v_max_day} чел.` : "нет данных";
     if (state.view === "clients") {
-      heatmap($("c-heat"), days, v.by_hour_day);
+      heatmap($("c-heat"), days, v.out_by_hour_day);
       groupedBars($("c-hours2"), hcats, hourSeries, (h) => h, hourTitle);
     }
     $("c-table").innerHTML = days.slice().reverse().map((x) => {
-      const hd = v.by_hour_day[x] || {};
+      const hd = v.out_by_hour_day[x] || {};
       const pk = Object.keys(hd).sort((a, b) => hd[b] - hd[a])[0];
-      return `<tr><td>${esc(dayLbl(x))}</td><td class="r">${v.by_day[x] || 0}</td><td class="r">${v.out_by_day[x] || 0}</td><td class="r">${pk != null ? hh(pk) : "—"}</td></tr>`;
-    }).join("") + `<tr><td><b>Итого</b></td><td class="r"><b>${v.total}</b></td><td class="r"><b>${v.exits}</b></td><td></td></tr>`;
+      return `<tr><td>${esc(dayLbl(x))}</td><td class="r">${v.out_by_day[x] || 0}</td><td class="r">${pk != null ? hh(pk) : "—"}</td></tr>`;
+    }).join("") + `<tr><td><b>Итого</b></td><td class="r"><b>${v.visitors}</b></td><td></td></tr>`;
 
     // --- сотрудники
     const st = d.staff;

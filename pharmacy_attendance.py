@@ -716,12 +716,13 @@ def visitors_text(visitors):
     now = dt.datetime.now()
     d = workday(now, DAY_START_HOUR)
     st = visitor_stats(read_visitors(VISITORS_FILE), d, d, DAY_START_HOUR)
-    peak = st["peak_hour"]
-    peak_s = (f"{peak:02d}:00 ({st['by_hour'][peak]} чел.)" if peak is not None else "нет данных")
+    # посетители = вышедшие + кто ещё внутри (см. visitor_stats: выходы сверены с кассой)
+    inside = visitors.counts()[2]
+    peak = st["v_peak_hour"]
+    peak_s = (f"{peak:02d}:00 ({st['out_by_hour'][peak]} чел.)" if peak is not None else "нет данных")
     return (f"👥 Посетители сегодня, {d:%d.%m.%Y}, филиал {BRANCH}:\n"
-            f"Зашло в аптеку: {st['total']}\n"
-            f"Вышло из аптеки: {st['exits']}\n"
-            f"Сейчас внутри: ≈{visitors.counts()[2]}\n"
+            f"Посетителей: {st['visitors'] + inside}\n"
+            f"Сейчас в аптеке: ≈{inside}\n"
             f"Час пик: {peak_s}")
 
 
@@ -769,7 +770,7 @@ def handle_command(text, att, visitors):
         month_job(att, today.replace(day=1) - dt.timedelta(days=1))
     elif cmd in ("/start", "/help"):
         send_telegram("Команды:\n/today - кто сегодня на работе\n"
-                      "/visitors - сколько клиентов зашло и вышло сегодня\n"
+                      "/visitors - сколько посетителей сегодня\n"
                       "/day - Excel за сегодня (или /day 21.10 - за дату)\n"
                       "/yesterday - Excel за вчера\n"
                       "/week - Excel за текущую неделю\n/prevweek - за прошлую неделю\n"

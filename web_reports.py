@@ -93,6 +93,10 @@ def create_app(config):
         v_period["by_day"] = {d.isoformat(): n for d, n in v_period["by_day"].items()}
         v_period["out_by_day"] = {d.isoformat(): n for d, n in v_period["out_by_day"].items()}
         v_period["by_hour_day"] = {d.isoformat(): hrs for d, hrs in v_period["by_hour_day"].items()}
+        v_period["out_by_hour_day"] = {d.isoformat(): hrs
+                                       for d, hrs in v_period["out_by_hour_day"].items()}
+        if v_period["v_busiest_day"]:
+            v_period["v_busiest_day"] = v_period["v_busiest_day"].isoformat()
         if v_period["busiest_day"]:
             v_period["busiest_day"] = v_period["busiest_day"].isoformat()
 
@@ -151,6 +155,9 @@ def create_app(config):
             "visitors_today": visitors_today,
             "visitors_inside": live.get("visitors_inside", 0),
             "visitors_exited": live.get("visitors_exited", v_today["exits"]),
+            # посетители за период = вышедшие (+ кто сейчас внутри, если период включает сегодня)
+            "visitors_people": v_period["visitors"]
+                               + (live.get("visitors_inside", 0) if start <= today <= end else 0),
             "visitors": v_period,
             "day_list": [d.isoformat() for d in _day_list(start, end)],
             "staff": staff,
