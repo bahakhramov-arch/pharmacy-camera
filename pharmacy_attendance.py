@@ -81,6 +81,9 @@ load_env_file()
 # --- Секреты: берутся из secrets.env или из переменных окружения ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
+# Несколько получателей через запятую (владелец, координатор): CHAT_ID=5985430548,786074666.
+# Уведомления уходят всем, ответ на команду - тому, кто её отправил.
+CHAT_IDS = [c.strip() for c in CHAT_ID.split(",") if c.strip()]
 NVR_PASSWORD = os.environ.get("NVR_PASSWORD", "")
 
 BRANCH = "Достлик"
@@ -451,15 +454,28 @@ def _ensure_tg_worker():
             _tg_worker_started = True
 
 
+_reply = threading.local()   # кому отвечать, пока выполняется команда из чата
+
+
+def _targets():
+    """Чат, приславший команду, - иначе все получатели из CHAT_ID."""
+    to = getattr(_reply, "chat", None)
+    return [to] if to else list(CHAT_IDS)
+
+
 def send_telegram(text, wait=False):
-    """wait=True — дождаться отправки (старт системы, ответы на команды)."""
+    """wait=True — дождаться отправки (старт системы, ответы на команды).
+    True, если ушло хотя бы одному получателю."""
     done = threading.Event()
     ok_box = [False]
+    targets = _targets()          # фиксируем сейчас: job может выполниться в другом потоке
 
     def job(t=text):
-        ok_box[0] = _post("sendMessage", data={"chat_id": CHAT_ID, "text": t})
-        if not ok_box[0]:
-            print("Не отправилось в Telegram:", t[:120])
+        for chat in targets:
+            if _post("sendMessage", data={"chat_id": chat, "text": t}):
+                ok_box[0] = True
+            else:
+                print(f"Не отправилось в Telegram ({chat}):", t[:120])
         done.set()
 
     if wait:
@@ -475,8 +491,9 @@ def _send_doc(path, caption):
     # открытый файловый объект был бы уже «дочитан» и ушёл бы пустым.
     with open(path, "rb") as f:
         content = f.read()
-    _post("sendDocument", data={"chat_id": CHAT_ID, "caption": caption},
-          files={"document": (os.path.basename(path), content)})
+    for chat in _targets():
+        _post("sendDocument", data={"chat_id": chat, "caption": caption},
+              files={"document": (os.path.basename(path), content)})
 
 
 def check_telegram():
@@ -494,7 +511,7 @@ def check_telegram():
     print(f"Telegram бот @{uname} отвечает")
     ok = send_telegram("🟢 Проверка связи: бот работает", wait=True)
     if not ok:
-        print("Бот не смог написать в CHAT_ID. Откройте чат с ботом и нажмите Start / /start.")
+        print("Бот не смог написать ни в один CHAT_ID. Откройте чат с ботом и нажмите Start / /start.")
         return False
     return True
 
@@ -671,8 +688,7 @@ def send_report(att, start, end, title, fname, caption):
     if ok:
         _send_doc(path, caption)
     else:
-        _post("sendMessage", data={"chat_id": CHAT_ID,
-                                   "text": f"За период {start:%d.%m}–{end:%d.%m.%Y} данных нет."})
+        send_telegram(f"За период {start:%d.%m}–{end:%d.%m.%Y} данных нет.", wait=True)
 
 
 def day_job(att, d):
@@ -967,12 +983,16 @@ def bot_loop(att, visitors):
             for u in data["result"]:
                 offset = u["update_id"] + 1
                 msg = u.get("message") or {}
-                if str(msg.get("chat", {}).get("id")) != str(CHAT_ID):
+                chat = str(msg.get("chat", {}).get("id"))
+                if chat not in CHAT_IDS:
                     continue
+                _reply.chat = chat
                 try:
                     handle_command(msg.get("text", ""), att, visitors)
                 except Exception as e:
                     print("Ошибка команды:", _safe(e))
+                finally:
+                    _reply.chat = None
         except Exception as e:
             print("Ошибка опроса бота:", _safe(e))
             time.sleep(5)
