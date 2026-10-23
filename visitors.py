@@ -94,11 +94,18 @@ class DoorCounter:
              или "center" (камера сверху);
     margin - «мёртвая зона» вокруг линии в долях кадра, чтобы дрожание рамки
              на линии не давало лишних входов/выходов.
+
+    Кроме пересечения линии считаем по зонам (зал на этой камере виден только краем,
+    и при ярком свете входящего за линией часто не видно вовсе):
+      вход  - пришёл с улицы и исчез у двери (тамбур) или в зале;
+      выход - появился у двери или в зале и ушёл на улицу.
+    door_zone - ширина зоны двери в долях кадра. На одного человека - не больше
+    одного входа и одного выхода, как бы его ни засчитали.
     """
 
     def __init__(self, camera, line, inside, anchor="bottom",
                  margin=0.02, max_lost_sec=1.5, min_hits=3,
-                 stitch_sec=2.0, stitch_dist=0.5, near_door=0.2):
+                 stitch_sec=2.0, stitch_dist=0.5, near_door=0.2, door_zone=0.15):
         """stitch_* - у двери детектор теряет человека (стекло, блики, близко к камере).
         Если трек пропал не дальше near_door (доля ширины кадра) от линии и в течение
         stitch_sec сек появился человек не дальше stitch_dist - это он же."""
@@ -115,6 +122,7 @@ class DoorCounter:
         self.stitch_sec = stitch_sec
         self.stitch_dist = stitch_dist
         self.near_door = near_door
+        self.door_zone = door_zone
         self.tracks = []
         self.next_id = 1
         # update() идёт в потоке двери, mark_staff()/draw() - в основном цикле
@@ -145,6 +153,12 @@ class DoorCounter:
         t = ((pt[0] - x1) * dx + (pt[1] - y1) * dy) / (dx * dx + dy * dy or 1.0)
         t = min(1.0, max(0.0, t))
         return ((pt[0] - x1 - t * dx) ** 2 + (pt[1] - y1 - t * dy) ** 2) ** 0.5
+
+    def _zone(self, box, w, h):
+        pt = self._point(box)
+        if self._side(pt, w, h) > 0:
+            return "in"
+        return "door" if self._door_dist(pt, w, h) <= self.door_zone * w else "out"
 
     def _point(self, box):
         x, y, w, h = box[:4]
@@ -179,7 +193,37 @@ class DoorCounter:
         with self.lock:
             return self._update(dets, now, frame_w, frame_h)
 
-    def _update(self, dets, now, frame_w, frame_h):
+    def _update(self, dets, now, w, h):
+        """Пересечение линии + зоны; у каждого трека не больше одного входа и одного выхода."""
+        before = {t["id"]: t for t in self.tracks}
+        events = []
+        for t, kind in self._cross_update(dets, now, w, h):
+            key = "in_done" if kind == "вход" else "out_done"
+            if not t.get(key):
+                t[key] = True
+                events.append((t, kind))
+        for t in self.tracks:
+            if t["last_seen"] != now:
+                continue
+            z = self._zone(t["box"], w, h)
+            t.setdefault("born", z)
+            t["zone"] = z
+            t["outs"] = t.get("outs", 0) + (z == "out")
+            # появился у двери/в зале и уверенно (2 кадра) ушёл на улицу
+            if (t["born"] != "out" and t["outs"] >= 2 and not t.get("out_done")
+                    and t["hits"] >= self.min_hits):
+                t["out_done"] = True
+                events.append((t, "выход"))
+        alive = {t["id"] for t in self.tracks}
+        for tid, t in before.items():
+            # пришёл с улицы и пропал у двери/в зале
+            if (tid not in alive and t.get("born") == "out" and t.get("zone") in ("door", "in")
+                    and t["hits"] >= self.min_hits and not t.get("in_done") and not t.get("out_done")):
+                t["in_done"] = True
+                events.append((t, "вход"))
+        return events
+
+    def _cross_update(self, dets, now, frame_w, frame_h):
         self._now = now
         matches, new = self._match(dets)
         new = self._stitch(dets, new, matches, now, frame_w, frame_h)
