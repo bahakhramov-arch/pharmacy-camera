@@ -1158,8 +1158,9 @@ def main():
                 if SHOW_WINDOW:
                     if door:
                         door.draw(frame)
-                        n_in, n_out, inside = visitors.counts()
-                        cv2.putText(frame, f"in: {n_in}  out: {n_out}  inside: {inside}  "
+                        _, n_out, inside = visitors.counts()
+                        # как на сайте: посетители = вышедшие + кто внутри
+                        cv2.putText(frame, f"visitors: {n_out + inside}  inside: {inside}  "
                                            f"door fps: {door_workers[r.name].fps:.1f}",
                                     (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                     cv2.imshow(ascii_label(r.name), frame)
