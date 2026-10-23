@@ -98,9 +98,9 @@ DOOR_STREAM_TYPE = 1                   # камера двери (только �
 CUSTOM_CAMERAS = {}
 
 # --- Смены и опоздания ---
-DEFAULT_SHIFT = "09:00"
+DEFAULT_SHIFT = "08:00"                # аптека работает 08:00-23:00 каждый день
 SHIFTS = {
-    "nurbonu": "08:00",                # смена 08:00-23:00
+    "nurbonu": "08:00",                # смена 08:00-23:00 (пока так)
     # "Азиза Каримова": "08:00",
     # "Ночной сотрудник": "21:00",     # ночные смены поддерживаются
 }
@@ -138,7 +138,7 @@ DOOR_DETECT_INTERVAL_SEC = 0.2         # ~5 кадров/сек на камер�
 REPORTS_DIR = "reports"
 AUTO_REPORT_TIME = "08:00"             # понедельник: отчёт за прошлую неделю,
                                        # 1-е число: за прошлый месяц
-DAILY_SUMMARY_TIME = "21:00"           # итог дня в Telegram ("" = выключить)
+DAILY_SUMMARY_TIME = "23:15"           # итог дня в Telegram, после закрытия в 23:00 ("" = выключить)
 REPORTS_WEB = True                     # сайт отчётов в браузере
 REPORTS_HOST = os.environ.get("REPORTS_HOST", "0.0.0.0")
 REPORTS_PORT = int(os.environ.get("REPORTS_PORT", "8080"))
