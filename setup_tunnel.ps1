@@ -1,4 +1,4 @@
-# Открыть сайт отчётов из интернета через Cloudflare Tunnel, например https://dostlik.5plyus.uz
+﻿# Открыть сайт отчётов из интернета через Cloudflare Tunnel, например https://dostlik.5plyus.uz
 #
 # Запуск на компьютере с программой учёта (PowerShell, в папке программы):
 #   powershell -ExecutionPolicy Bypass -File setup_tunnel.ps1 -Hostname dostlik.5plyus.uz
