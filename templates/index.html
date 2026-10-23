@@ -50,6 +50,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* .btn/.badge задают display и иначе перебивают hidden */
   html, body { margin: 0; }
   body {
     background:
@@ -262,6 +263,12 @@
   .hb .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
   .chips { display: flex; gap: 6px; }
+  .sys { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+  .sys-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); }
+  .sys-row .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+  .sys-row .meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--muted); }
+  .sys-row .meta b { display: block; font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #sysWarn { margin-left: 6px; }
   .err-box {
     background: color-mix(in srgb, var(--crit) 10%, var(--surface)); color: var(--crit);
     border: 1px solid color-mix(in srgb, var(--crit) 30%, transparent);
@@ -290,7 +297,7 @@
       <img class="logo" src="/static/logo.png" alt="Аптека 5+">
       <div>
         <h1 id="title">Аптека 5+</h1>
-        <p><span class="pulse" id="pulse"></span><span id="updated">загрузка…</span></p>
+        <p><span class="pulse" id="pulse"></span><span id="updated">загрузка…</span><span id="sysWarn" class="badge crit" hidden></span></p>
       </div>
     </div>
     <button class="btn icon" id="appSettings" title="Адрес сервера" aria-label="Настройки приложения" hidden>
@@ -384,6 +391,13 @@
       <div class="card">
         <div class="card-h"><h2>Последние события</h2><span class="hint">за период</span></div>
         <ul class="feed" id="o-feed"></ul>
+      </div>
+    </div>
+
+    <div class="grid" id="sysCard" hidden>
+      <div class="card">
+        <div class="card-h"><h2>Состояние системы</h2><span class="hint" id="sysUptime"></span></div>
+        <div class="sys" id="sysList"></div>
       </div>
     </div>
   </section>
@@ -635,6 +649,27 @@
     return `<span class="badge"><span class="d"></span>вовремя</span>`;
   }
 
+  // Состояние системы: камеры и скорость подсчёта у двери (только когда сайт запущен программой учёта)
+  const camIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`;
+  function renderSystem(sys) {
+    if (!sys) { $("sysCard").hidden = true; $("sysWarn").hidden = true; return; }
+    $("sysCard").hidden = false;
+    const st = new Date(sys.started);
+    $("sysUptime").textContent = `программа работает с ${st.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+    const problems = [];
+    $("sysList").innerHTML = sys.cameras.map((c) => {
+      let badge;
+      if (!c.online) { badge = `<span class="badge crit">${icon.warn}нет видео</span>`; problems.push(`${c.name}: нет видео`); }
+      else if (c.door_fps != null && c.door_fps < 3) { badge = `<span class="badge warn">${icon.warn}медленно</span>`; problems.push(`${c.name}: мало кадров`); }
+      else badge = `<span class="badge good"><span class="d"></span>работает</span>`;
+      const fps = c.door_fps == null ? "" : `<div class="meta">анализ у двери<b>${c.door_fps} к/с</b></div>`;
+      return `<div class="sys-row"><span class="ic">${camIcon}</span><div><div style="font-weight:600">${esc(c.name)} <span style="color:var(--muted);font-weight:400">· ${esc(c.role)}</span></div>${badge}</div>${fps}</div>`;
+    }).join("");
+    $("sysWarn").hidden = !problems.length;
+    $("sysWarn").innerHTML = problems.length ? `${icon.warn}${esc(problems[0])}` : "";
+    $("sysWarn").title = problems.join("; ");
+  }
+
   function render(d) {
     const v = d.visitors, days = d.day_list;
     $("title").textContent = `Аптека 5+ · ${d.branch}`;
@@ -680,6 +715,8 @@
         <div class="meta">с ${p.first_in || "—"}<b>${dur(p.worked_sec)}</b></div>
       </div>`).join("") : `<div class="empty">Сегодня отметок пока нет</div>`;
     $("o-feed").innerHTML = feedHtml(d.feed.slice(0, 8));
+
+    renderSystem(d.system);
 
     // --- клиенты
     $("c-in").textContent = v.total;

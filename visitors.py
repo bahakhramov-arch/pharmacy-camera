@@ -210,9 +210,18 @@ class DoorCounter:
                 "staff": None,
             })
             self.next_id += 1
-        self.tracks = [t for t in self.tracks
-                       if (now - t["last_seen"]).total_seconds()
-                       <= (self.stitch_sec if t.get("near_door") else self.max_lost_sec)]
+        alive = []
+        for t in self.tracks:
+            if ((now - t["last_seen"]).total_seconds()
+                    <= (self.stitch_sec if t.get("near_door") else self.max_lost_sec)):
+                alive.append(t)
+            # Зал на этой камере виден краем кадра: вошедший мелькает за линией 1 раз и
+            # исчезает внутри. Пересёк линию внутрь и пропал там - это вход.
+            # (Для выхода так не делаем: вышедшего долго видно на улице, а одиночная
+            # рамка снаружи бывает чужим человеком после склейки.)
+            elif t["side"] == -1 and t["pending"] >= 1 and t["hits"] >= self.min_hits:
+                events.append((t, "вход"))
+        self.tracks = alive
         for t in self.tracks:
             if t["last_seen"] == now:
                 t["near_door"] = (self._door_dist(self._point(t["box"]), frame_w, frame_h)

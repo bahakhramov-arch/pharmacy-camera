@@ -158,6 +158,7 @@ def create_app(config):
             "staff_today_count": len({n for (_, n) in today_days}),
             "staff_live": live_rows,
             "staff_days": staff_days,
+            "system": live.get("system"),
             "feed": feed,
         })
 

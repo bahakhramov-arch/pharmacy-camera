@@ -92,6 +92,9 @@ STAFF_CHANNELS = [5]                   # учёт сотрудников
 VISITOR_CHANNELS = [1]                 # подсчёт клиентов (вход)
 CHANNELS = sorted(set(STAFF_CHANNELS + VISITOR_CHANNELS))
 STREAM_TYPE = 0                        # 0 - основной поток, 1 - облегчённый (меньше нагрузка)
+DOOR_STREAM_TYPE = 1                   # камера двери (только клиенты): облегчённый 704x576.
+                                       # Детектору людей хватает, а распаковка 2560x1440 съедала
+                                       # ~ядро процессора, и у двери оставалось 2-3 кадра/с
 CUSTOM_CAMERAS = {}
 
 # --- Смены и опоздания ---
@@ -204,6 +207,11 @@ def camera_label(ch):
     return f"Камера {ch}"
 
 
+def stream_type(ch):
+    """Камере, где распознаём лица сотрудников, нужен полный поток; только для двери - облегчённый."""
+    return DOOR_STREAM_TYPE if ch in VISITOR_CHANNELS and ch not in STAFF_CHANNELS else STREAM_TYPE
+
+
 def build_cameras():
     if CUSTOM_CAMERAS:
         return dict(CUSTOM_CAMERAS)
@@ -212,7 +220,7 @@ def build_cameras():
     login = quote(NVR_LOGIN, safe="")
     for ch in CHANNELS:
         cams[camera_label(ch)] = (f"rtsp://{login}:{pwd}@{NVR_IP}:{NVR_PORT}"
-                                  f"/cam/realmonitor?channel={ch}&subtype={STREAM_TYPE}")
+                                  f"/cam/realmonitor?channel={ch}&subtype={stream_type(ch)}")
     return cams
 
 
@@ -859,6 +867,7 @@ class CameraReader(threading.Thread):
         self.frame = None
         self.latest = None   # последний кадр для потока двери (get() его не забирает)
         self.seq = 0
+        self.last_frame = 0.0  # time.time() последнего кадра - для «Состояния системы» на сайте
         self.lock = threading.Lock()
         self.running = True
 
@@ -884,6 +893,7 @@ class CameraReader(threading.Thread):
                 fails = 0
                 with self.lock:
                     self.frame = self.latest = frame
+                    self.last_frame = time.time()
                     self.seq += 1
             cap.release()
             time.sleep(3)
@@ -1009,6 +1019,29 @@ def main():
     sent = load_json(REPORT_STATE_FILE, {})
     threading.Thread(target=bot_loop, args=(att, visitors), daemon=True).start()
 
+    cameras = build_cameras()
+    readers = [CameraReader(n, s) for n, s in cameras.items()]
+    for r in readers:
+        r.start()
+    door_workers = {r.name: DoorWorker(r, doors[r.name], visitors)
+                    for r in readers if r.name in doors}
+    for wk in door_workers.values():
+        wk.start()
+    started = dt.datetime.now()
+
+    def system_state():
+        """Для сайта: живы ли камеры и успевает ли подсчёт у двери."""
+        now_ts = time.time()
+        return {
+            "started": started.isoformat(timespec="seconds"),
+            "cameras": [{
+                "name": r.name,
+                "role": "дверь" if r.name in doors else "сотрудники",
+                "online": r.last_frame > 0 and now_ts - r.last_frame < 10,
+                "door_fps": round(door_workers[r.name].fps, 1) if r.name in door_workers else None,
+            } for r in readers],
+        }
+
     reports_url = ""
     if REPORTS_WEB:
         reports_url = start_reports_server({
@@ -1023,18 +1056,10 @@ def main():
                 "visitors_inside": visitors.counts()[2],
                 "visitors_today": visitors.counts()[0],
                 "visitors_exited": visitors.counts()[1],
+                "system": system_state(),
             },
         }, host=REPORTS_HOST, port=int(REPORTS_PORT))
         print(f"Сайт отчётов: {reports_url}")
-
-    cameras = build_cameras()
-    readers = [CameraReader(n, s) for n, s in cameras.items()]
-    for r in readers:
-        r.start()
-    door_workers = {r.name: DoorWorker(r, doors[r.name], visitors)
-                    for r in readers if r.name in doors}
-    for wk in door_workers.values():
-        wk.start()
 
     today = workday(dt.datetime.now(), DAY_START_HOUR)
     streaks = {r.name: {} for r in readers}
