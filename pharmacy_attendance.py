@@ -9,7 +9,7 @@
 папка photos/ с фото сотрудников.
 
 Как определяется уход: если человека не видела ни одна камера дольше
-LEAVE_TIMEOUT_MIN минут, фиксируется «уход» ровно в момент, когда его
+N минут (настройка «уход», по умолчанию 60), фиксируется «уход» ровно в момент, когда его
 видели в последний раз. Если он снова появился - это новый «приход»
 (время перерыва в отработанные часы не входит).
 
@@ -46,6 +46,7 @@ import requests
 
 from reports import (build_days, make_report, month_range, read_events,
                      read_visitors, visitor_stats, week_range, workday)
+import settings
 from visitors import DoorCounter, PersonDetector, VisitorLog
 from web_reports import start_reports_server
 
@@ -97,14 +98,9 @@ DOOR_STREAM_TYPE = 1                   # камера двери (только �
                                        # ~ядро процессора, и у двери оставалось 2-3 кадра/с
 CUSTOM_CAMERAS = {}
 
-# --- Смены и опоздания ---
-DEFAULT_SHIFT = "08:00"                # аптека работает 08:00-23:00 каждый день
-SHIFTS = {
-    "nurbonu": "08:00",                # смена 08:00-23:00 (пока так)
-    # "Азиза Каримова": "08:00",
-    # "Ночной сотрудник": "21:00",     # ночные смены поддерживаются
-}
-GRACE_MINUTES = 10                     # допуск: опоздание считается, если позже на > N минут
+# --- Смены, допуск на опоздание и уход ---
+# Меняются без кода: на сайте (вкладка «Настройки») или в боте (/smeny, /smena, /dopusk, /uhod).
+# Хранятся в settings.json; значения по умолчанию - в settings.py (DEFAULTS).
 
 # --- Рабочий день ---
 # Час, когда начинается новый рабочий день. 0 = полночь.
@@ -113,7 +109,6 @@ GRACE_MINUTES = 10                     # допуск: опоздание счи
 DAY_START_HOUR = 0
 
 # --- Уход и перерывы ---
-LEAVE_TIMEOUT_MIN = 60                 # не виден дольше N минут = ушёл (без клиентов сидят вне камер)
 SEND_RETURN_MESSAGES = True            # писать «вернулся» после перерыва
 
 # --- Посетители: вход / выход по линии у двери (камеры VISITOR_CHANNELS) ---
@@ -576,9 +571,8 @@ class Attendance:
             print("После перезапуска считаются на месте: " + ", ".join(sorted(self.present)))
 
     def _late(self, name, now):
-        # имя - из файла фото; регистр не важен (на Dell «Nurbonu.jpg», в настройке «nurbonu»)
-        shift = {k.lower(): v for k, v in SHIFTS.items()}.get(name.lower(), DEFAULT_SHIFT)
-        h, m = map(int, shift.split(":"))
+        # смена из settings.json; имя без учёта регистра («Nurbonu.jpg» = «nurbonu»)
+        h, m = map(int, settings.shift_for(name).split(":"))
         shift_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
         # Берём ближайшую к «сейчас» смену: так работает и для ночных смен
         # (пришёл в 21:05 к смене 21:00; пришёл в 08:50 к смене 09:00 - не опоздал).
@@ -587,7 +581,7 @@ class Attendance:
         elif now - shift_dt > dt.timedelta(hours=12):
             shift_dt += dt.timedelta(days=1)
         late = int((now - shift_dt).total_seconds() // 60)
-        return late if late > GRACE_MINUTES else 0
+        return late if late > settings.load()["grace_minutes"] else 0
 
     # --- события
     def seen(self, name, now):
@@ -629,11 +623,12 @@ class Attendance:
         send_telegram(text)
 
     def check_departures(self, now):
+        timeout = settings.load()["leave_timeout_min"] * 60
         with self.lock:
             gone = []
             for n in self.present:
                 ls = self.last_seen.setdefault(n, now)
-                if (now - ls).total_seconds() > LEAVE_TIMEOUT_MIN * 60:
+                if (now - ls).total_seconds() > timeout:
                     gone.append((n, ls))
         for n, ls in gone:
             # Пока шли к этому месту, человека могли снова увидеть - тогда не уходим.
@@ -743,6 +738,69 @@ def today_text(att):
     return "\n".join(lines)
 
 
+EMPLOYEES = []   # имена сотрудников (по файлам фото), заполняется в main()
+
+
+def shifts_text():
+    s = settings.load()
+    g = s["grace_minutes"]
+    h, m = map(int, s["default_shift"].split(":"))
+    until = (dt.datetime(2000, 1, 1, h, m) + dt.timedelta(minutes=g)).strftime("%H:%M")
+    lines = [f"⏰ Смены, филиал {BRANCH}:",
+             f"По умолчанию: {s['default_shift']}",
+             f"Допуск на опоздание: {g} мин (до {until} - вовремя)",
+             f"Уход: если не видно {s['leave_timeout_min']} мин", ""]
+    names = sorted(set(EMPLOYEES) | {n for n in s["shifts"]
+                                     if n not in {e.lower() for e in EMPLOYEES}}, key=str.lower)
+    for n in names:
+        own = s["shifts"].get(n.lower())
+        lines.append(f"• {n} - {own}" if own else f"• {n} - {s['default_shift']} (по умолчанию)")
+    lines += ["", "Изменить:", "/smena Имя 09:00 - смена одному",
+              "/smena все 08:00 - по умолчанию для всех", "/smena Имя сброс - вернуть общую",
+              "/dopusk 10 - допуск, мин", "/uhod 60 - уход, мин"]
+    return "\n".join(lines)
+
+
+def shift_command(cmd, args):
+    """/smena, /dopusk, /uhod -> текст ответа. Меняет settings.json, перезапуск не нужен."""
+    s = settings.load()
+    if cmd == "/dopusk":
+        if not args or not args[0].isdigit() or not 0 <= int(args[0]) <= 120:
+            return "Пример: /dopusk 10  (от 0 до 120 минут)"
+        settings.update(grace_minutes=int(args[0]))
+        return f"✅ Допуск на опоздание: {int(args[0])} мин\n\n" + shifts_text()
+    if cmd == "/uhod":
+        if not args or not args[0].isdigit() or not 10 <= int(args[0]) <= 600:
+            return "Пример: /uhod 60  (от 10 до 600 минут)"
+        settings.update(leave_timeout_min=int(args[0]))
+        return f"✅ Уход засчитывается, если не видно {int(args[0])} мин\n\n" + shifts_text()
+    # /smena Имя 09:00 | /smena все 08:00 | /smena Имя сброс
+    if len(args) < 2:
+        return "Пример: /smena Nurbonu 09:00  или  /smena все 08:00\n\n" + shifts_text()
+    name, value = " ".join(args[:-1]), args[-1]
+    if name.lower() in ("все", "всем", "hammasi", "all", "default"):
+        t = settings.norm_time(value)
+        if not t:
+            return "Не понял время. Пример: /smena все 08:00"
+        settings.update(default_shift=t)
+        return f"✅ Смена по умолчанию: {t}\n\n" + shifts_text()
+    known = {e.lower(): e for e in EMPLOYEES}
+    if name.lower() not in known and name.lower() not in s["shifts"]:
+        return (f"Сотрудник «{name}» не найден. Имена - как у фото: "
+                + ", ".join(sorted(EMPLOYEES, key=str.lower)))
+    shifts = dict(s["shifts"])
+    if value.lower() in ("сброс", "удалить", "нет", "reset", "-"):
+        shifts.pop(name.lower(), None)
+        settings.update(shifts=shifts)
+        return f"✅ {known.get(name.lower(), name)}: общая смена {s['default_shift']}\n\n" + shifts_text()
+    t = settings.norm_time(value)
+    if not t:
+        return "Не понял время. Пример: /smena Nurbonu 09:00"
+    shifts[name.lower()] = t
+    settings.update(shifts=shifts)
+    return f"✅ {known.get(name.lower(), name)}: смена с {t}\n\n" + shifts_text()
+
+
 def handle_command(text, att, visitors):
     if not text.startswith("/"):
         return
@@ -769,13 +827,18 @@ def handle_command(text, att, visitors):
         month_job(att, today)
     elif cmd == "/prevmonth":
         month_job(att, today.replace(day=1) - dt.timedelta(days=1))
+    elif cmd == "/smeny":
+        send_telegram(shifts_text(), wait=True)
+    elif cmd in ("/smena", "/dopusk", "/uhod"):
+        send_telegram(shift_command(cmd, parts[1:]), wait=True)
     elif cmd in ("/start", "/help"):
         send_telegram("Команды:\n/today - кто сегодня на работе\n"
                       "/visitors - сколько посетителей сегодня\n"
                       "/day - Excel за сегодня (или /day 21.10 - за дату)\n"
                       "/yesterday - Excel за вчера\n"
                       "/week - Excel за текущую неделю\n/prevweek - за прошлую неделю\n"
-                      "/month - Excel за текущий месяц\n/prevmonth - за прошлый месяц",
+                      "/month - Excel за текущий месяц\n/prevmonth - за прошлый месяц\n"
+                      "/smeny - смены и как их менять (/smena, /dopusk, /uhod)",
                       wait=True)
 
 
@@ -1002,6 +1065,7 @@ def main():
     if not db:
         print("Нет фото сотрудников. Добавьте их в папку photos и запустите снова.")
         return
+    EMPLOYEES[:] = sorted(db, key=str.lower)
 
     if not check_telegram():
         print("Камеры запущу, но сообщения в Telegram могут не приходить.")
@@ -1064,6 +1128,7 @@ def main():
                 "visitors_exited": visitors.counts()[1],
                 "system": system_state(),
             },
+            "employees": lambda: list(EMPLOYEES),
         }, host=REPORTS_HOST, port=int(REPORTS_PORT))
         print(f"Сайт отчётов: {reports_url}")
 

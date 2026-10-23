@@ -16,6 +16,7 @@ from functools import wraps
 
 from flask import Flask, jsonify, render_template, request, Response, send_file
 
+import settings
 from reports import (build_days, make_report, read_events, read_visitors, visitor_stats,
                      workday)
 
@@ -188,6 +189,29 @@ def create_app(config):
         if not ok:
             return jsonify({"error": "За этот период данных нет"}), 404
         return send_file(path, as_attachment=True, download_name=name)
+
+    @app.get("/api/settings")
+    @requires_auth
+    def get_settings():
+        fn = config.get("employees")
+        employees = list(fn()) if fn else []
+        return jsonify({"settings": settings.load(), "employees": employees,
+                        "can_edit": bool(password)})
+
+    @app.post("/api/settings")
+    @requires_auth
+    def post_settings():
+        # без пароля сайта настройки не меняем: иначе смены поменяет любой в сети
+        if not password:
+            return jsonify({"error": "Сначала задайте пароль сайта (REPORTS_PASSWORD в secrets.env) - "
+                                     "без пароля менять настройки нельзя"}), 403
+        data = request.get_json(silent=True) or {}
+        bad = [k for k in ("default_shift",) if k in data and not settings.norm_time(data[k])]
+        bad += [n for n, t in (data.get("shifts") or {}).items() if t and not settings.norm_time(t)]
+        if bad:
+            return jsonify({"error": "Неверное время: " + ", ".join(map(str, bad))}), 400
+        data["shifts"] = {n: t for n, t in (data.get("shifts") or {}).items() if t}
+        return jsonify({"settings": settings.save(data)})
 
     @app.get("/api/health")
     def health():

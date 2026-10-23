@@ -263,6 +263,15 @@
   .hb .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
   .chips { display: flex; gap: 6px; }
+  .form { display: grid; gap: 16px; }
+  .form label { display: grid; gap: 6px; font-weight: 600; font-size: 13.5px; }
+  .form small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .form input, .shift-in {
+    border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px;
+    padding: 8px 10px; font: inherit; color: var(--ink); max-width: 220px;
+  }
+  .form input:disabled, .shift-in:disabled { opacity: .6; }
+  .save-bar { display: flex; justify-content: flex-end; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
   .sys { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
   .sys-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px; background: var(--surface-2); }
   .sys-row .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
@@ -331,6 +340,7 @@
   <button class="tab" role="tab" data-v="clients">Клиенты</button>
   <button class="tab" role="tab" data-v="staff">Сотрудники</button>
   <button class="tab" role="tab" data-v="log">Журнал<span class="count" id="logCount">0</span></button>
+  <button class="tab" role="tab" data-v="settings">Настройки</button>
 </nav>
 
 <main>
@@ -467,6 +477,34 @@
       <ul class="feed" id="l-feed"></ul>
     </div>
   </section>
+
+  <!-- ================= НАСТРОЙКИ ================= -->
+  <section class="view" id="v-settings">
+    <div class="err-box" id="setErr"></div>
+    <div class="grid g-2e" style="margin-top:0">
+      <div class="card">
+        <div class="card-h"><h2>Общие правила</h2><span class="hint">для всех сотрудников</span></div>
+        <div class="form">
+          <label>Начало смены по умолчанию<input type="time" id="setDefault" required></label>
+          <label>Допуск на опоздание, мин<input type="number" id="setGrace" min="0" max="120" required>
+            <small id="setGraceHint"></small></label>
+          <label>Уход, если не видно, мин<input type="number" id="setLeave" min="10" max="600" required>
+            <small>Пока сотрудника нет на камерах меньше этого времени, это не уход, а перерыв.</small></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Смены сотрудников</h2><span class="hint">пусто = как по умолчанию</span></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Сотрудник</th><th>Начало смены</th><th></th></tr></thead>
+          <tbody id="setShifts"></tbody>
+        </table></div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <span id="setStatus" class="hint"></span>
+      <button class="btn primary" id="setSave">Сохранить</button>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -514,7 +552,60 @@
     document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.v === v)));
     document.querySelectorAll(".view").forEach((s) => s.classList.toggle("on", s.id === "v-" + v));
     if (location.hash !== "#" + v) history.replaceState(null, "", "#" + v);
+    if (v === "settings") loadSettings();
     if (state.data) render(state.data); // графики считают ширину только у видимых
+  }
+
+  // ---------- настройки смен (settings.json на компьютере учёта, без перезапуска) ----------
+  let canEdit = false;
+  function graceHint() {
+    const [h, m] = ($("setDefault").value || "08:00").split(":").map(Number);
+    const g = Number($("setGrace").value || 0), t = h * 60 + m + g;
+    $("setGraceHint").textContent = `пришёл до ${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")} — вовремя`;
+  }
+  async function loadSettings() {
+    $("setErr").style.display = "none";
+    try {
+      const r = await fetch("/api/settings", { cache: "no-store" });
+      if (!r.ok) throw new Error("сервер ответил " + r.status);
+      const d = await r.json(), s = d.settings;
+      canEdit = d.can_edit;
+      $("setDefault").value = s.default_shift;
+      $("setGrace").value = s.grace_minutes;
+      $("setLeave").value = s.leave_timeout_min;
+      const own = s.shifts, low = d.employees.map((e) => e.toLowerCase());
+      const names = d.employees.concat(Object.keys(own).filter((n) => !low.includes(n)));
+      $("setShifts").innerHTML = names.length ? names.map((n) => `<tr>
+          <td><span class="who">${ava(n)}${esc(n)}</span></td>
+          <td><input type="time" class="shift-in" data-n="${esc(n.toLowerCase())}" value="${esc(own[n.toLowerCase()] || "")}"></td>
+          <td><button class="btn icon reset" data-n="${esc(n.toLowerCase())}" title="Как по умолчанию" aria-label="Сбросить">✕</button></td>
+        </tr>`).join("") : `<tr><td colspan="3" style="color:var(--muted)">Сотрудники появятся, когда сайт запущен программой учёта</td></tr>`;
+      document.querySelectorAll("#setShifts .reset").forEach((b) => b.addEventListener("click", () => {
+        document.querySelector(`.shift-in[data-n="${b.dataset.n}"]`).value = "";
+      }));
+      document.querySelectorAll("#v-settings input, #setSave").forEach((el) => { el.disabled = !canEdit; });
+      $("setStatus").textContent = canEdit ? "" : "Чтобы менять настройки, задайте пароль сайта (REPORTS_PASSWORD в secrets.env).";
+      graceHint();
+    } catch (e) {
+      $("setErr").textContent = "Не удалось загрузить настройки: " + e.message;
+      $("setErr").style.display = "block";
+    }
+  }
+  async function saveSettings() {
+    const shifts = {};
+    document.querySelectorAll(".shift-in").forEach((i) => { if (i.value) shifts[i.dataset.n] = i.value; });
+    const body = { default_shift: $("setDefault").value, grace_minutes: Number($("setGrace").value),
+                   leave_timeout_min: Number($("setLeave").value), shifts };
+    $("setSave").disabled = true; $("setStatus").textContent = "Сохраняю…";
+    try {
+      const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "сервер ответил " + r.status);
+      $("setStatus").textContent = `✓ Сохранено в ${new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} — работает сразу`;
+      loadSettings();
+    } catch (e) {
+      $("setStatus").textContent = "Не сохранилось: " + e.message;
+    } finally { $("setSave").disabled = !canEdit; }
   }
 
   // ---------- графики (SVG без библиотек) ----------
@@ -805,7 +896,9 @@
   // ---------- старт ----------
   document.documentElement.dataset.theme = store.get("theme") === "light" ? "light" : "dark"; // по умолчанию тёмная
   const hv = location.hash.slice(1);
-  show(["overview", "clients", "staff", "log"].includes(hv) ? hv : "overview");
+  $("setSave").addEventListener("click", saveSettings);
+  ["setDefault", "setGrace"].forEach((id) => $(id).addEventListener("input", graceHint));
+  show(["overview", "clients", "staff", "log", "settings"].includes(hv) ? hv : "overview");
   setPreset(store.get("preset") && store.get("preset") !== "custom" ? store.get("preset") : "today");
 })();
 </script>
