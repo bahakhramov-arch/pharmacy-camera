@@ -152,7 +152,7 @@ DOOR_DETECT_INTERVAL_SEC = 0.2         # ~5 кадров/сек на камер�
 REPORTS_DIR = "reports"
 AUTO_REPORT_TIME = "08:00"             # понедельник: отчёт за прошлую неделю,
                                        # 1-е число: за прошлый месяц
-DAILY_SUMMARY_TIME = "23:00"           # итог дня в Telegram, при закрытии аптеки ("" = выключить)
+DAILY_SUMMARY_TIME = os.environ.get("DAILY_SUMMARY_TIME", "23:00")  # итог дня в Telegram, при закрытии аптеки ("" = выключить)
 REPORTS_WEB = True                     # сайт отчётов в браузере
 REPORTS_HOST = os.environ.get("REPORTS_HOST", "0.0.0.0")
 REPORTS_PORT = int(os.environ.get("REPORTS_PORT", "8080"))
