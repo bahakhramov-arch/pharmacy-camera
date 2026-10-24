@@ -16,3 +16,4 @@ _webcam.jpg
 __pycache__/
 apk/
 settings.json
+door_lines.json

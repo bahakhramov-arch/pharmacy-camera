@@ -86,14 +86,27 @@ CHAT_ID = os.environ.get("CHAT_ID", "")
 CHAT_IDS = [c.strip() for c in CHAT_ID.split(",") if c.strip()]
 NVR_PASSWORD = os.environ.get("NVR_PASSWORD", "")
 
-BRANCH = "Достлик"
+def _channels(key, default):
+    """«5» или «3,6» из secrets.env -> [5] / [3, 6]."""
+    raw = os.environ.get(key, "")
+    try:
+        return [int(x) for x in raw.replace(";", ",").split(",") if x.strip()] or default
+    except ValueError:
+        return default
+
+
+# --- Филиал: всё, что отличается между филиалами, - в secrets.env (код общий) ---
+BRANCH = os.environ.get("BRANCH", "Достлик")
 
 # --- Камеры: только NVR по RTSP. Веб-камера ноутбука не используется. ---
-NVR_IP = "192.168.1.99"
-NVR_PORT = 554
-NVR_LOGIN = "admin"
-STAFF_CHANNELS = [5]                   # учёт сотрудников
-VISITOR_CHANNELS = [1]                 # подсчёт клиентов (вход)
+NVR_IP = os.environ.get("NVR_IP", "192.168.1.99")
+NVR_PORT = int(os.environ.get("NVR_PORT", "554"))
+NVR_LOGIN = os.environ.get("NVR_LOGIN", "admin")
+STAFF_CHANNELS = _channels("STAFF_CHANNELS", [5])      # распознавание сотрудников
+VISITOR_CHANNELS = _channels("VISITOR_CHANNELS", [1])  # подсчёт посетителей у двери
+# Отвечать на команды бота может только ОДИН компьютер (иначе Telegram выдаёт Conflict).
+# Остальные филиалы ставят BOT_COMMANDS=0: уведомления шлют, команды не принимают.
+BOT_COMMANDS = os.environ.get("BOT_COMMANDS", "1").strip() not in ("0", "no", "false", "")
 CHANNELS = sorted(set(STAFF_CHANNELS + VISITOR_CHANNELS))
 STREAM_TYPE = 0                        # 0 - основной поток, 1 - облегчённый (меньше нагрузка)
 DOOR_STREAM_TYPE = 1                   # камера двери (только клиенты): облегчённый 704x576.
@@ -1277,7 +1290,10 @@ def main():
             doors[camera_label(ch)] = DoorCounter(camera_label(ch), cfg["line"], cfg["inside"],
                                                   anchor=DOOR_ANCHOR)
     sent = load_json(REPORT_STATE_FILE, {})
-    threading.Thread(target=bot_loop, args=(att, visitors), daemon=True).start()
+    if BOT_COMMANDS:
+        threading.Thread(target=bot_loop, args=(att, visitors), daemon=True).start()
+    else:
+        print("Команды бота на этом компьютере выключены (BOT_COMMANDS=0) - только уведомления.")
 
     cameras = build_cameras()
     readers = [CameraReader(n, s) for n, s in cameras.items()]
