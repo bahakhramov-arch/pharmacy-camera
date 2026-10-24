@@ -11,7 +11,7 @@ for %%P in ("%ProgramFiles(x86)%\cloudflared\cloudflared.exe" "%ProgramFiles%\cl
 if not defined CF for /f "delims=" %%P in ('where cloudflared 2^>nul') do set CF="%%P"
 if defined CF if exist "%USERPROFILE%\.cloudflared\config.yml" (
   echo Starting internet access tunnel...
-  start "cloudflare-tunnel" /min %CF% tunnel run
+  start "" /b %CF% tunnel run > logs\tunnel.log 2>&1
 )
 
 :loop

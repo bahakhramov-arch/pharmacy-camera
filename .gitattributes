@@ -1,3 +1,4 @@
 *.bat text eol=crlf
 gradlew text eol=lf
 *.ps1 -text
+*.vbs text eol=crlf
