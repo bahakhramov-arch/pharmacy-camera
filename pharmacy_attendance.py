@@ -84,6 +84,9 @@ CHAT_ID = os.environ.get("CHAT_ID", "")
 # Несколько получателей через запятую (владелец, координатор): CHAT_ID=5985430548,786074666.
 # Уведомления уходят всем, ответ на команду - тому, кто её отправил.
 CHAT_IDS = [c.strip() for c in CHAT_ID.split(",") if c.strip()]
+# Чат сотрудников (группа): туда уходит ТОЛЬКО «пришёл(ла) в ЧЧ:ММ», без опозданий и отчётов.
+# id группы: добавить бота в группу и написать там /id.
+STAFF_CHAT_IDS = [c.strip() for c in os.environ.get("STAFF_CHAT_ID", "").split(",") if c.strip()]
 NVR_PASSWORD = os.environ.get("NVR_PASSWORD", "")
 
 def _channels(key, default):
@@ -476,12 +479,13 @@ def _targets():
     return [to] if to else list(CHAT_IDS)
 
 
-def send_telegram(text, wait=False):
+def send_telegram(text, wait=False, to=None):
     """wait=True — дождаться отправки (старт системы, ответы на команды).
+    to - список чатов вместо обычных получателей.
     True, если ушло хотя бы одному получателю."""
     done = threading.Event()
     ok_box = [False]
-    targets = _targets()          # фиксируем сейчас: job может выполниться в другом потоке
+    targets = list(to) if to else _targets()   # фиксируем сейчас: job может выполниться в другом потоке
 
     def job(t=text):
         for chat in targets:
@@ -674,6 +678,8 @@ class Attendance:
         print(text)
         if first or SEND_RETURN_MESSAGES:
             send_telegram(text)
+        if first and STAFF_CHAT_IDS:
+            send_telegram(f"✅ {name} пришёл(ла) в {t}", to=STAFF_CHAT_IDS)
 
     def _depart(self, name, when):
         with self.lock:
@@ -1067,6 +1073,10 @@ def bot_loop(att, visitors):
                 offset = u["update_id"] + 1
                 msg = u.get("message") or {}
                 chat = str(msg.get("chat", {}).get("id"))
+                if (msg.get("text") or "").split("@")[0].strip().lower() == "/id":
+                    # любой чат может узнать свой id - чтобы вписать его в CHAT_ID / STAFF_CHAT_ID
+                    send_telegram(f"id этого чата: {chat}", wait=True, to=[chat])
+                    continue
                 if chat not in CHAT_IDS:
                     continue
                 _reply.chat = chat
