@@ -156,7 +156,7 @@ REPORTS_PORT = int(os.environ.get("REPORTS_PORT", "8080"))
 
 # --- Распознавание ---
 PHOTOS_DIR = "photos"
-MATCH_THRESHOLD = 0.32                 # чуть мягче официальных 0.363: камера ≠ селфи
+MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.32"))  # мягче официальных 0.363: камера ≠ селфи
 MATCH_MARGIN = 0.06                    # лучший кандидат должен опережать второго на столько,
                                        # иначе похожих сотрудников путает (baha/nurbonu ≈ 0.27)
 CONFIRM_FRAMES = 3                     # столько анализов подряд один и тот же человек
