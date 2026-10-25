@@ -160,7 +160,11 @@ REPORTS_PORT = int(os.environ.get("REPORTS_PORT", "8080"))
 # --- Распознавание ---
 PHOTOS_DIR = "photos"
 MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.32"))  # мягче официальных 0.363: камера ≠ селфи
-MATCH_MARGIN = 0.06                    # лучший кандидат должен опережать второго на столько,
+# Кого нет на фото с камеры (Имя_camN.jpg из enroll.py), того узнаём строже: одно обычное
+# фото анфас похоже на многих клиентов (Антей 25.10: клиентка в платке = «Elza» 0.36-0.40)
+STRICT_THRESHOLD = float(os.environ.get("STRICT_THRESHOLD", "0"))   # 0 = выключено
+CAM_ENROLLED = set()                   # имена, у которых есть фото с камеры
+MATCH_MARGIN = 0.06                   # лучший кандидат должен опережать второго на столько,
                                        # иначе похожих сотрудников путает (baha/nurbonu ≈ 0.27)
 CONFIRM_FRAMES = 3                     # столько анализов подряд один и тот же человек
 MIN_FACE_WIDTH = 36                    # меньше - SFace даёт случайные совпадения, только рамка
@@ -328,6 +332,8 @@ def load_employees(detector, recognizer):
             print(f"  ! На фото {fname} сбой распознавания: {e}")
             continue
         db.setdefault(name, []).append(feature)
+        if "_cam" in fname.lower():
+            CAM_ENROLLED.add(name)
     summary = ", ".join(f"{n} ({len(f)} фото)" for n, f in db.items()) or "-"
     print(f"Загружено сотрудников: {len(db)} -> {summary}")
     return db
@@ -400,7 +406,8 @@ def identify(feature, db, recognizer):
     ranked = sorted(per_name.items(), key=lambda kv: kv[1], reverse=True)
     best_name, best_score = ranked[0]
     second = ranked[1][1] if len(ranked) > 1 else 0.0
-    if best_score >= MATCH_THRESHOLD and best_score - second >= MATCH_MARGIN:
+    need = MATCH_THRESHOLD if best_name in CAM_ENROLLED else max(MATCH_THRESHOLD, STRICT_THRESHOLD)
+    if best_score >= need and best_score - second >= MATCH_MARGIN:
         return best_name, best_score
     return None, best_score
 
