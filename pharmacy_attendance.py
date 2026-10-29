@@ -164,6 +164,16 @@ MATCH_THRESHOLD = float(os.environ.get("MATCH_THRESHOLD", "0.32"))  # мягче
 # фото анфас похоже на многих клиентов (Антей 25.10: клиентка в платке = «Elza» 0.36-0.40)
 STRICT_THRESHOLD = float(os.environ.get("STRICT_THRESHOLD", "0"))   # 0 = выключено
 CAM_ENROLLED = set()                   # имена, у которых есть фото с камеры
+# Свой порог для отдельных людей: PERSON_THRESHOLDS=Shaxnoza:0.46,Elza:0.44
+# (подбирают по записи: чтобы человек проходил, а похожие клиенты - нет)
+PERSON_THRESHOLDS = {}
+for _item in os.environ.get("PERSON_THRESHOLDS", "").split(","):
+    if ":" in _item:
+        _n, _v = _item.rsplit(":", 1)
+        try:
+            PERSON_THRESHOLDS[_n.strip().lower()] = float(_v)
+        except ValueError:
+            pass
 MATCH_MARGIN = 0.06                   # лучший кандидат должен опережать второго на столько,
                                        # иначе похожих сотрудников путает (baha/nurbonu ≈ 0.27)
 CONFIRM_FRAMES = 3                     # столько анализов подряд один и тот же человек
@@ -407,6 +417,7 @@ def identify(feature, db, recognizer):
     best_name, best_score = ranked[0]
     second = ranked[1][1] if len(ranked) > 1 else 0.0
     need = MATCH_THRESHOLD if best_name in CAM_ENROLLED else max(MATCH_THRESHOLD, STRICT_THRESHOLD)
+    need = PERSON_THRESHOLDS.get(best_name.lower(), need)
     if best_score >= need and best_score - second >= MATCH_MARGIN:
         return best_name, best_score
     return None, best_score
