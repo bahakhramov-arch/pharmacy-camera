@@ -221,6 +221,78 @@ def create_app(config):
         data["shifts"] = shifts
         return jsonify({"settings": settings.save(data)})
 
+    # --- Видео с регистратора: проверить, кого камера «узнала» (только с паролем сайта) ---
+    def _nvr():
+        return (os.environ.get("NVR_IP", "192.168.1.99"), os.environ.get("NVR_PORT", "554"),
+                os.environ.get("NVR_LOGIN", "admin"), os.environ.get("NVR_PASSWORD", ""))
+
+    def _channel():
+        try:
+            ch = int(request.args.get("ch", ""))
+        except ValueError:
+            return None
+        return ch if 1 <= ch <= 32 else None
+
+    @app.get("/api/record")
+    @requires_auth
+    def record():
+        """Запись канала как .dav: /api/record?ch=6&start=2026-10-25T13:22&minutes=3 (до 15 мин)."""
+        if not password:
+            return jsonify({"error": "Видео доступно только при заданном пароле сайта"}), 403
+        import requests
+        from requests.auth import HTTPDigestAuth
+        ch = _channel()
+        try:
+            start = dt.datetime.fromisoformat(request.args.get("start", ""))
+            minutes = float(request.args.get("minutes", "2"))
+        except ValueError:
+            start, minutes = None, 0
+        if ch is None or start is None or not 0 < minutes <= 15:
+            return jsonify({"error": "Пример: /api/record?ch=6&start=2026-10-25T13:22&minutes=3"}), 400
+        end = start + dt.timedelta(minutes=minutes)
+        ip, _, login, pwd = _nvr()
+        url = (f"http://{ip}/cgi-bin/loadfile.cgi?action=startLoad&channel={ch}"
+               f"&startTime={start:%Y-%m-%d%%20%H:%M:%S}&endTime={end:%Y-%m-%d%%20%H:%M:%S}&subtype=0")
+        try:
+            r = requests.get(url, auth=HTTPDigestAuth(login, pwd), stream=True, timeout=60)
+        except Exception as e:
+            return jsonify({"error": f"Регистратор недоступен: {e}"}), 502
+        if not r.ok:
+            r.close()
+            return jsonify({"error": f"Регистратор ответил {r.status_code} (записи нет?)"}), 404
+
+        def gen():
+            with r:
+                for chunk in r.iter_content(1 << 16):
+                    yield chunk
+        name = f"cam{ch}_{start:%Y%m%d_%H%M}.dav"
+        return Response(gen(), mimetype="application/octet-stream",
+                        headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.get("/api/snap")
+    @requires_auth
+    def snap():
+        """Кадр с камеры сейчас (JPEG): /api/snap?ch=5"""
+        if not password:
+            return jsonify({"error": "Видео доступно только при заданном пароле сайта"}), 403
+        import cv2
+        from urllib.parse import quote
+        ch = _channel()
+        if ch is None:
+            return jsonify({"error": "Пример: /api/snap?ch=5"}), 400
+        ip, port, login, pwd = _nvr()
+        cap = cv2.VideoCapture(f"rtsp://{quote(login, safe='')}:{quote(pwd, safe='')}@{ip}:{port}"
+                               f"/cam/realmonitor?channel={ch}&subtype=0", cv2.CAP_FFMPEG)
+        frame = None
+        for _ in range(15):                 # первые кадры бывают серыми
+            ok, f = cap.read()
+            if ok:
+                frame = f
+        cap.release()
+        if frame is None:
+            return jsonify({"error": f"Камера {ch}: нет картинки"}), 404
+        return Response(cv2.imencode(".jpg", frame)[1].tobytes(), mimetype="image/jpeg")
+
     @app.get("/api/health")
     def health():
         return jsonify({"ok": True})
