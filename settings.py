@@ -144,3 +144,16 @@ def arrival_allowed(name, when):
     span = (e_min - w_from) % 1440 or 1440
     now = when.hour * 60 + when.minute
     return (now - w_from) % 1440 < span       # минута конца смены - уже не приход
+
+
+def window_start(name, when):
+    """Начало окна прихода (начало смены - early_minutes), к которому относится when:
+    одна смена - один «первый приход», даже если ночная смена идёт через полночь."""
+    import datetime as _dt
+    start, _ = shift_range(name)
+    sh, sm = map(int, start.split(":"))
+    w_from = (sh * 60 + sm - load()["early_minutes"]) % 1440
+    ws = when.replace(hour=w_from // 60, minute=w_from % 60, second=0, microsecond=0)
+    if ws > when:
+        ws -= _dt.timedelta(days=1)
+    return ws

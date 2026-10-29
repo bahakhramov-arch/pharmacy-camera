@@ -16,4 +16,5 @@ For Each p In procs
 Next
 
 sh.CurrentDirectory = dir
+sh.Environment("PROCESS")("SHOW_WINDOW") = "0"   ' no camera windows in background
 sh.Run "cmd /c """ & dir & "\start.bat""", 0, False

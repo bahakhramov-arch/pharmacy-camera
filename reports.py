@@ -158,7 +158,8 @@ def build_days(events, start, end, last_seen=None, now=None, day_start=0):
                     open_start = e["when"]
                 if first_in is None:
                     first_in = e["when"]
-                    late = e["late"]
+                # ночная смена: в 00:00 перенос (опоздание 0), а вечерний приход - с опозданием
+                late = max(late, e["late"] or 0)
             elif e["type"] == "уход":
                 if open_start is not None:
                     worked += (e["when"] - open_start).total_seconds()
@@ -365,8 +366,7 @@ def _clients_sheet(ws, st, start, end, title, now):
     ws["A1"] = f"Клиенты. {title}"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = (f"Сформирован: {(now or dt.datetime.now()):%d.%m.%Y %H:%M}. "
-                "Посетители считаются по выходам через дверь (сверено с кассой: 23.10.2026 - "
-                "230 выходов при 230 чеках).")
+                "Посетители считаются по выходам через дверь.")
     ws["A2"].font = Font(italic=True, color="666666")
 
     peak = st["v_peak_hour"]

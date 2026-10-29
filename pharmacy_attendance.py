@@ -191,7 +191,8 @@ DETECT_INTERVAL_SEC = 0.15             # анализировать не чащ�
 LOG_FILE = "events.csv"
 LAST_SEEN_FILE = "last_seen.json"
 REPORT_STATE_FILE = "report_state.json"
-SHOW_WINDOW = True                     # False = работать без окна (для фонового запуска)
+# окна с камерами; run_hidden.vbs запускает с SHOW_WINDOW=0 (фон, без окон)
+SHOW_WINDOW = os.environ.get("SHOW_WINDOW", "1").strip() not in ("0", "no", "false")
 WINDOW_TRANSLIT = False                # True = в окне писать имена латиницей (OpenCV не рисует кириллицу); на журнал/Telegram не влияет
 SEND_START_MESSAGE = True
 
@@ -565,7 +566,8 @@ class Attendance:
             except ValueError:
                 pass
         self.present = set()
-        self.arrived_today = set()
+        # имя -> начало окна смены, в которое уже был «первый приход» (см. settings.window_start)
+        self.shift_arrived = {}
         self._quiet = {}
         self._last_save = 0.0
         self._recover()
@@ -632,8 +634,8 @@ class Attendance:
         last = {}
         for e in events:
             last[e["name"]] = e
-            if e["type"] == "приход" and workday(e["when"], DAY_START_HOUR) == today:
-                self.arrived_today.add(e["name"])
+            if e["type"] == "приход":
+                self.shift_arrived[e["name"]] = settings.window_start(e["name"], e["when"])
         for name, e in last.items():
             if e["type"] != "приход":
                 continue
@@ -682,9 +684,11 @@ class Attendance:
                     print(f"{name}: распознан(а), но уже числится на месте - "
                           f"повторное сообщение не отправляется (время прихода: /today)")
                 return
-            first = name not in self.arrived_today
+            # «первый» = первый в этой смене (у ночной смены перенос в 00:00 - та же смена)
+            ws = settings.window_start(name, now)
+            first = self.shift_arrived.get(name) != ws
             self.present.add(name)
-            self.arrived_today.add(name)
+            self.shift_arrived[name] = ws
             late = self._late(name, now) if first else 0
             self.log_event(now, name, "приход", late)
         t = now.strftime("%H:%M")
@@ -748,7 +752,6 @@ class Attendance:
             else:
                 self._depart(n, ls)
         with self.lock:
-            self.arrived_today = set(carry)
             for n in carry:
                 self.log_event(boundary - dt.timedelta(seconds=1), n, "уход")
                 self.log_event(boundary, n, "приход", 0)
@@ -1405,6 +1408,9 @@ def main():
                 if frame is None:
                     continue
                 got_any = True
+                # без окон кадр между анализами не нужен - не тратим процессор на resize
+                if not SHOW_WINDOW and time.time() - last_proc[r.name] < DETECT_INTERVAL_SEC:
+                    continue
 
                 h0, w0 = frame.shape[:2]
                 if w0 > MAX_FRAME_WIDTH:
