@@ -293,6 +293,25 @@ def create_app(config):
             return jsonify({"error": f"Камера {ch}: нет картинки"}), 404
         return Response(cv2.imencode(".jpg", frame)[1].tobytes(), mimetype="image/jpeg")
 
+    @app.get("/api/log")
+    @requires_auth
+    def log_tail():
+        """Последние строки logs\\run.log: /api/log?lines=200 (для проверки сбоев удалённо)."""
+        if not password:
+            return jsonify({"error": "Лог доступен только при заданном пароле сайта"}), 403
+        try:
+            n = max(10, min(int(request.args.get("lines", "200")), 5000))
+        except ValueError:
+            n = 200
+        path = os.path.join(BASE_DIR, "logs", "run.log")
+        if not os.path.exists(path):
+            return jsonify({"error": "logs\\run.log нет"}), 404
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - n * 300))
+            lines = f.read().decode("utf-8", "replace").splitlines()[-n:]
+        return Response("\n".join(lines), mimetype="text/plain; charset=utf-8")
+
     @app.get("/api/health")
     def health():
         return jsonify({"ok": True})

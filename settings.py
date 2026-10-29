@@ -143,4 +143,4 @@ def arrival_allowed(name, when):
     w_from = (s_min - load()["early_minutes"]) % 1440
     span = (e_min - w_from) % 1440 or 1440
     now = when.hour * 60 + when.minute
-    return (now - w_from) % 1440 <= span
+    return (now - w_from) % 1440 < span       # минута конца смены - уже не приход
