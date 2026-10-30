@@ -183,6 +183,10 @@ MAX_FRAME_WIDTH = 1920
 # другой размер (на OpenCV 5 смена input size сбивает детектор на живом видео).
 # Крупный план (лицо на весь кадр) ловим вторым проходом с полями.
 DETECT_SCORE = 0.35
+# Узнаём только «уверенные» лица: на слабых срабатываниях детектора бывают руки и
+# предметы (Антей 30.10: рука с телефоном у кассы = «Zufar», уверенность лица 0.44-0.62;
+# настоящие лица на камерах 5/6 - обычно 0.7-0.85). 0 = выключено.
+MIN_ID_FACE_SCORE = float(os.environ.get("MIN_ID_FACE_SCORE", "0"))
 YUNET_SIZE = 640
 DETECT_INTERVAL_SEC = 0.15             # анализировать не чаще, чем раз в N сек на камеру
                                        # (снижает нагрузку на процессор; 0 = каждый кадр)
@@ -1430,7 +1434,7 @@ def main():
                     best_lbl = ""
                     for face in (faces if faces is not None else []):
                         x, y, w, h = map(int, face[:4])
-                        if w < MIN_FACE_WIDTH:
+                        if w < MIN_FACE_WIDTH or face[-1] < MIN_ID_FACE_SCORE:
                             if SHOW_WINDOW:
                                 cv2.rectangle(frame, (x, y), (x + w, y + h), (180, 180, 0), 1)
                             continue
