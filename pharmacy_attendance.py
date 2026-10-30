@@ -593,9 +593,12 @@ class Attendance:
         day = workday(when, DAY_START_HOUR)
         late = self._late(name, when)
         with self.log_lock:
-            with open(LOG_FILE, encoding="utf-8-sig", newline="") as f:
-                rows = list(csv.reader(f))
-            head, body = rows[:1], rows[1:]
+            rows = []
+            if os.path.exists(LOG_FILE):          # журнала может ещё не быть (новый день, очистка)
+                with open(LOG_FILE, encoding="utf-8-sig", newline="") as f:
+                    rows = list(csv.reader(f))
+            head = rows[:1] or [["Дата", "Время", "Сотрудник", "Филиал", "Событие", "Опоздание"]]
+            body = rows[1:]
             keep, removed = [], 0
             for r in body:
                 if len(r) >= 5 and r[2].lower() == name.lower():
@@ -614,6 +617,16 @@ class Attendance:
             with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
                 csv.writer(f).writerows(head + keep)
             os.replace(tmp, LOG_FILE)
+        with self.lock:
+            # приход этой смены уже есть - следующее распознавание не «первый приход»
+            ws = settings.window_start(name, when)
+            if self.shift_arrived.get(name) is None or self.shift_arrived[name] <= ws:
+                self.shift_arrived[name] = ws
+            # исправили сегодняшний приход - человек на работе: дальше без «вернулся»
+            now = dt.datetime.now()
+            if day == workday(now, DAY_START_HOUR) and name not in self.present:
+                self.present.add(name)
+                self.last_seen[name] = now
         return removed, late
 
     def snapshot(self):
