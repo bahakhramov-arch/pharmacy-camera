@@ -314,8 +314,12 @@ def create_app(config):
 
     @app.get("/api/health")
     def health():
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "branch": config["branch"]})
 
+    import control_api
+    import panel
+    control_api.register(app, config, requires_auth, BASE_DIR)
+    panel.register(app, config)
     return app
 
 

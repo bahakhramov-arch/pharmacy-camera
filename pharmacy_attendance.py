@@ -248,13 +248,7 @@ def stream_type(ch):
 def build_cameras():
     if CUSTOM_CAMERAS:
         return dict(CUSTOM_CAMERAS)
-    cams = {}
-    pwd = quote(NVR_PASSWORD, safe="")
-    login = quote(NVR_LOGIN, safe="")
-    for ch in CHANNELS:
-        cams[camera_label(ch)] = (f"rtsp://{login}:{pwd}@{NVR_IP}:{NVR_PORT}"
-                                  f"/cam/realmonitor?channel={ch}&subtype={stream_type(ch)}")
-    return cams
+    return {camera_label(ch): camera_url(ch, stream_type(ch)) for ch in CHANNELS}
 
 
 def download_models():
@@ -317,8 +311,12 @@ def save_json(path, data):
 
 # ------------------------- Распознавание -------------------------
 
+PHOTO_ISSUES = {}   # фото, которые не подошли: файл -> причина (показывается в панели управления)
+
+
 def load_employees(detector, recognizer):
-    db = {}
+    global CAM_ENROLLED, PHOTO_ISSUES
+    db, cam, issues = {}, set(), {}
     if not os.path.isdir(PHOTOS_DIR):
         os.makedirs(PHOTOS_DIR)
         print(f"Создана папка {PHOTOS_DIR}. Положите туда фото сотрудников.")
@@ -330,28 +328,91 @@ def load_employees(detector, recognizer):
         img = read_image(os.path.join(PHOTOS_DIR, fname))
         if img is None:
             print(f"  ! Не удалось открыть {fname}")
+            issues[fname] = "файл не открывается"
             continue
         faces = detect_faces(detector, img)
         if faces is None or len(faces) == 0:
             print(f"  ! На фото {fname} лицо не найдено, пропускаю "
                   f"(другое фото анфас, светлее, без фильтра)")
+            issues[fname] = "лицо не найдено"
             continue
         face = max(faces, key=lambda f: f[2] * f[3])
         try:
             aligned = recognizer.alignCrop(img, face)
             if aligned is None or aligned.size == 0:
                 print(f"  ! На фото {fname} не удалось выровнять лицо, пропускаю")
+                issues[fname] = "лицо не выровнялось"
                 continue
             feature = recognizer.feature(aligned)
         except Exception as e:
             print(f"  ! На фото {fname} сбой распознавания: {e}")
+            issues[fname] = "сбой распознавания"
             continue
         db.setdefault(name, []).append(feature)
         if "_cam" in fname.lower():
-            CAM_ENROLLED.add(name)
+            cam.add(name)
+    CAM_ENROLLED, PHOTO_ISSUES = cam, issues     # целиком: при перезагрузке фото без перезапуска
     summary = ", ".join(f"{n} ({len(f)} фото)" for n, f in db.items()) or "-"
     print(f"Загружено сотрудников: {len(db)} -> {summary}")
     return db
+
+
+def camera_url(ch, subtype=0):
+    pwd = quote(NVR_PASSWORD, safe="")
+    login = quote(NVR_LOGIN, safe="")
+    return (f"rtsp://{login}:{pwd}@{NVR_IP}:{NVR_PORT}"
+            f"/cam/realmonitor?channel={ch}&subtype={subtype}")
+
+
+def enroll_camera(name, ch, secs=25, keep=4):
+    """Фото сотрудника с камеры (как enroll.py): лучшие кадры самого крупного лица ->
+    photos/Имя_camN.jpg. В кадре должен быть только он. Возвращает имена сохранённых файлов."""
+    det = cv2.FaceDetectorYN.create("face_detection_yunet_2023mar.onnx", "", (YUNET_SIZE, YUNET_SIZE),
+                                    DETECT_SCORE, 0.3, 5000)
+    cap = open_capture(camera_url(ch))
+    if not cap.isOpened():
+        raise RuntimeError(f"камера {ch} не открывается")
+    found, t0, n = [], time.time(), 0
+    try:
+        while time.time() - t0 < secs:
+            ok, f = cap.read()
+            if not ok:
+                continue
+            n += 1
+            if n % 5:
+                continue
+            h, w = f.shape[:2]
+            if w > MAX_FRAME_WIDTH:
+                f = cv2.resize(f, (MAX_FRAME_WIDTH, int(h * MAX_FRAME_WIDTH / w)))
+            faces = nms_faces(detect_faces(det, f, thorough=False))
+            if faces is None or len(faces) == 0:
+                continue
+            face = max(faces, key=lambda x: x[2] * x[3])
+            if face[2] < MIN_FACE_WIDTH or face[-1] < max(0.6, MIN_ID_FACE_SCORE):
+                continue
+            x, y, bw, bh = map(int, face[:4])
+            pad = int(bw * 0.8)
+            crop = f[max(0, y - pad):y + bh + pad, max(0, x - pad):x + bw + pad].copy()
+            found.append((float(face[-1]) * bw, time.time(), crop))
+    finally:
+        cap.release()
+    found.sort(key=lambda r: -r[0])
+    picked = []
+    for r in found:                         # разные моменты = разные повороты головы
+        if all(abs(r[1] - p[1]) > 1.5 for p in picked):
+            picked.append(r)
+        if len(picked) == keep:
+            break
+    os.makedirs(PHOTOS_DIR, exist_ok=True)
+    saved, k = [], 1
+    for _, _, crop in picked:
+        while os.path.exists(os.path.join(PHOTOS_DIR, f"{name}_cam{k}.jpg")):
+            k += 1
+        fname = f"{name}_cam{k}.jpg"
+        cv2.imencode(".jpg", crop)[1].tofile(os.path.join(PHOTOS_DIR, fname))
+        saved.append(fname)
+        k += 1
+    return saved
 
 
 def _letterbox(img, size=YUNET_SIZE):
@@ -642,6 +703,24 @@ class Attendance:
             self._last_save = time.time()
             save_json(LAST_SEEN_FILE,
                       {n: t.isoformat() for n, t in self.snapshot().items()})
+
+    def resync(self):
+        """После правки журнала в панели: кто «на месте» и чей приход уже был - заново по журналу."""
+        now = dt.datetime.now()
+        today = workday(now, DAY_START_HOUR)
+        last, arrived = {}, {}
+        for e in read_events(LOG_FILE):
+            last[e["name"]] = e
+            if e["type"] == "приход":
+                arrived[e["name"]] = settings.window_start(e["name"], e["when"])
+        with self.lock:
+            self.shift_arrived = arrived
+            present = {n for n, e in last.items()
+                       if e["type"] == "приход" and workday(e["when"], DAY_START_HOUR) == today}
+            for n in present - self.present:
+                self.last_seen[n] = now          # таймаут ухода - от момента правки
+            self.present = present
+        self.save_state(force=True)
 
     # --- восстановление после перезапуска
     def _recover(self):
@@ -1320,6 +1399,23 @@ def main():
         print("Нет фото сотрудников. Добавьте их в папку photos и запустите снова.")
         return
     EMPLOYEES[:] = sorted(db, key=str.lower)
+    faces_db = {"db": db}      # панель управления заменяет словарь целиком (перезагрузка фото)
+
+    def reload_faces():
+        """Перечитать папку photos без перезапуска (свои детектор/распознаватель - основные заняты)."""
+        d2 = cv2.FaceDetectorYN.create("face_detection_yunet_2023mar.onnx", "", (YUNET_SIZE, YUNET_SIZE),
+                                       DETECT_SCORE, 0.3, 5000)
+        r2 = cv2.FaceRecognizerSF.create("face_recognition_sface_2021dec.onnx", "")
+        new = load_employees(d2, r2)
+        if new:
+            faces_db["db"] = new
+            EMPLOYEES[:] = sorted(new, key=str.lower)
+        return {"employees": {n: len(f) for n, f in new.items()}, "issues": dict(PHOTO_ISSUES)}
+
+    def restart():
+        """Перезапуск программы: start.bat поднимет её снова через 10 секунд."""
+        att.save_state(force=True)
+        threading.Timer(1.0, lambda: os._exit(0)).start()
 
     if not check_telegram():
         print("Камеры запущу, но сообщения в Telegram могут не приходить.")
@@ -1386,6 +1482,21 @@ def main():
                 "system": system_state(),
             },
             "employees": lambda: list(EMPLOYEES),
+            "control": {
+                "reload_faces": reload_faces,
+                "enroll": enroll_camera,
+                "resync": att.resync,
+                "fix_arrival": att.fix_arrival,
+                "late": att._late,
+                "restart": restart,
+                "log_lock": att.log_lock,
+                "photos_dir": os.path.join(BASE_DIR, PHOTOS_DIR),
+                "env_path": os.path.join(BASE_DIR, "secrets.env"),
+                "photo_issues": lambda: dict(PHOTO_ISSUES),
+                "cam_enrolled": lambda: sorted(CAM_ENROLLED),
+                "channels": {"staff": STAFF_CHANNELS, "door": VISITOR_CHANNELS},
+                "camera_url": camera_url,
+            },
         }, host=REPORTS_HOST, port=int(REPORTS_PORT))
         print(f"Сайт отчётов: {reports_url}")
 
@@ -1458,7 +1569,7 @@ def main():
                             feature = recognizer.feature(aligned)
                         except Exception:
                             continue
-                        name, score = identify(feature, db, recognizer)
+                        name, score = identify(feature, faces_db["db"], recognizer)
                         if name:
                             cnt = streaks[r.name].get(name, 0) + 1
                             new_streaks[name] = cnt

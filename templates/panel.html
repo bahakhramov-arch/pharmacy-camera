@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5+ Панель управления</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0a090e; --surface: #15131d; --surface-2: #1f1c2b; --ink: #f2f0f7; --ink-2: #c4bfd3;
+    --muted: #8c87a0; --border: rgba(255,255,255,.08); --accent: #8b6cf6; --accent-2: #6d3df5;
+    --accent-soft: #2a2142; --glow: rgba(139,108,246,.18); --good: #2fc52f; --warn: #fab219; --crit: #e05555;
+    --shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(900px 420px at 15% -120px, var(--glow), transparent 70%), var(--page);
+    background-attachment: fixed; color: var(--ink); min-height: 100vh;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  .top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--page) 90%, transparent);
+         backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  .top-in { max-width: 1240px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; }
+  .brand b { font-size: 16px; } .brand small { display: block; color: var(--muted); font-size: 12px; }
+  .chips, .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip, .tab { border: 1px solid var(--border); background: var(--surface); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  .chip.on, .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tabs-wrap { max-width: 1240px; margin: 0 auto; padding: 8px 16px 0; overflow-x: auto; }
+  .tabs { flex-wrap: nowrap; }
+  main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 15px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .ok { color: var(--good); } .bad { color: var(--crit); } .warn { color: var(--warn); }
+  .btn { border: 1px solid var(--border); background: var(--surface-2); padding: 7px 12px; border-radius: 9px; cursor: pointer; }
+  a.btn { text-decoration: none; display: inline-block; }
+  .card { overflow-x: auto; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { border-color: color-mix(in srgb, var(--crit) 50%, transparent); color: var(--crit); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  input, select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; min-width: 0; }
+  input[type=file] { padding: 5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--accent-soft); }
+  .photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .ph { position: relative; width: 84px; }
+  .ph img { width: 84px; height: 84px; object-fit: cover; border-radius: 9px; border: 2px solid transparent; display: block; }
+  .ph.camph img { border-color: var(--accent); }
+  .ph.issue img { border-color: var(--crit); opacity: .6; }
+  .ph button { position: absolute; top: 3px; right: 3px; border: 0; border-radius: 6px; background: rgba(0,0,0,.7); color: #fff; cursor: pointer; padding: 0 6px; }
+  .ph span { display: block; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cams { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .cam { background: #000; border-radius: 10px; overflow: hidden; position: relative; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+  .cam img { width: 100%; height: 100%; object-fit: contain; }
+  .cam .lbl { position: absolute; left: 8px; top: 6px; background: rgba(0,0,0,.6); padding: 1px 8px; border-radius: 6px; font-size: 12px; }
+  pre { background: #07060a; border: 1px solid var(--border); border-radius: 10px; padding: 10px; max-height: 480px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow); z-index: 50; max-width: calc(100% - 32px); }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .formgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  @media (max-width: 600px) { .brand small { display: none; } main { padding: 12px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><img src="/static/logo.png" alt=""><div><b>Панель управления</b><small>все филиалы «5+»</small></div></div>
+    <div class="chips" id="branches"></div>
+  </div>
+  <div class="tabs-wrap"><div class="tabs" id="tabs"></div></div>
+</header>
+<main id="main"></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const TABS = [["overview", "Обзор"], ["staff", "Сотрудники"], ["journal", "Журнал"],
+              ["shifts", "Смены"], ["cams", "Камеры"], ["system", "Система"]];
+let branches = [], cur = 0, tab = "overview", enrollTimer = null;
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const base = (id = cur) => `${location.origin}/panel/b/${id}/api/`;
+
+function toast(msg, ms = 3500) {
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), ms);
+}
+async function api(path, opts = {}, id = cur) {
+  const o = {...opts};
+  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers = {"Content-Type": "application/json"}; delete o.json; }
+  const r = await fetch(base(id) + path, o);
+  let data = null;
+  try { data = await r.json(); } catch (e) { data = {error: `Ответ ${r.status}`}; }
+  if (!r.ok) throw new Error(data.error || `Ошибка ${r.status}`);
+  return data;
+}
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+function renderNav() {
+  $("#branches").innerHTML = branches.map((b) =>
+    `<button class="chip ${b.id === cur ? "on" : ""}" data-b="${b.id}">${esc(b.name)}</button>`).join("");
+  $("#tabs").innerHTML = TABS.map(([k, t]) => `<button class="tab ${k === tab ? "on" : ""}" data-t="${k}">${t}</button>`).join("");
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-b]"), t = e.target.closest("[data-t]");
+  if (b) { cur = +b.dataset.b; save(); show(); }
+  if (t) { tab = t.dataset.t; save(); show(); }
+});
+function save() { try { localStorage.setItem("panel", JSON.stringify({cur, tab})); } catch (e) {} }
+
+async function show() {
+  renderNav(); clearInterval(enrollTimer);
+  const m = $("#main");
+  m.innerHTML = `<div class="card muted">Загрузка…</div>`;
+  try { await VIEWS[tab](m); } catch (e) { m.innerHTML = `<div class="card bad">${esc(e.message)}</div>`; }
+}
+
+const VIEWS = {
+  // ---------- Обзор: все филиалы сразу ----------
+  async overview(m) {
+    m.innerHTML = `<div class="grid" id="ov"></div>`;
+    for (const b of branches) {
+      const el = document.createElement("div"); el.className = "card";
+      el.innerHTML = `<h3>${esc(b.name)}</h3><div class="muted">Загрузка…</div>`;
+      $("#ov").appendChild(el);
+      api("overview", {}, b.id).then((d) => {
+        const sys = d.system || {}, cams = sys.cameras || [];
+        const online = cams.filter((c) => c.online).length;
+        const staff = (d.staff_live || []).map((s) =>
+          `<tr><td>${esc(s.name)}</td><td>${s.present ? '<span class="ok">на месте</span>' : '<span class="muted">ушёл(ла)</span>'}</td>
+           <td class="small">${s.first_in || "—"}${s.late ? ` <span class="warn">+${s.late} мин</span>` : ""}</td></tr>`).join("");
+        el.innerHTML = `<h3>${esc(b.name)} <span class="badge ok">работает</span></h3>
+          <div class="row small muted">Запущена: ${sys.started ? sys.started.replace("T", " ") : "—"} · сейчас ${d.now}</div>
+          <div class="row" style="margin:10px 0;gap:18px">
+            <div><div class="muted small">Клиентов сегодня</div><b style="font-size:22px">${d.visitors_exited ?? d.visitors_people ?? 0}</b></div>
+            <div><div class="muted small">Камеры</div><b style="font-size:22px" class="${online === cams.length ? "ok" : "bad"}">${online}/${cams.length}</b></div>
+            <div><div class="muted small">На месте</div><b style="font-size:22px">${(d.staff_present || []).length}</b></div>
+          </div>
+          <table>${staff || '<tr><td class="muted">Сегодня отметок нет</td></tr>'}</table>`;
+      }).catch((e) => { el.innerHTML = `<h3>${esc(b.name)} <span class="badge bad">не отвечает</span></h3><div class="small bad">${esc(e.message)}</div>`; });
+    }
+  },
+
+  // ---------- Сотрудники и фото ----------
+  async staff(m) {
+    const d = await api("staff");
+    const chans = [...new Set([...(d.channels.staff || []), ...(d.channels.door || [])])];
+    const chOpts = (chans.length ? chans : [5, 6]).map((c) => `<option value="${c}">Камера ${c}</option>`).join("");
+    const names = d.staff.map((s) => s.name);
+    m.innerHTML = `
+      <div class="card"><h3>Добавить сотрудника или фото</h3>
+        <div class="row">
+          <input id="upName" placeholder="Имя (латиницей, одно слово)" list="names">
+          <datalist id="names">${names.map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+          <input type="file" id="upFile" accept="image/*">
+          <button class="btn primary" id="upBtn">Загрузить фото</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <select id="enCh">${chOpts}</select>
+          <select id="enSecs"><option value="20">20 сек</option><option value="30" selected>30 сек</option><option value="45">45 сек</option></select>
+          <button class="btn" id="enBtn">📷 Записать лицо с камеры</button>
+          <span class="small muted">в кадре только этот сотрудник, смотрит в камеру</span>
+        </div>
+        <div id="enStatus" class="small" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="reloadBtn">✔ Применить фото (без перезапуска)</button>
+          <span class="small muted">после добавления или удаления фото</span>
+        </div>
+      </div>
+      <div class="grid">${d.staff.map((s) => `
+        <div class="card"><h3>${esc(s.name)} ${d.loaded.includes(s.name) ? "" : '<span class="badge warn">не загружен</span>'}</h3>
+          <div class="small muted">Смена ${esc(s.shift)} · ${s.cam_enrolled ? '<span class="ok">есть фото с камеры</span>' : '<span class="warn">нет фото с камеры — узнаётся строже</span>'}${s.threshold ? ` · порог ${esc(s.threshold)}` : ""}</div>
+          <div class="photos">${s.photos.map((p) => `
+            <div class="ph ${p.cam ? "camph" : ""} ${p.issue ? "issue" : ""}" title="${esc(p.issue || p.file)}">
+              <img loading="lazy" src="${base()}photo?file=${encodeURIComponent(p.file)}">
+              <button data-del="${esc(p.file)}" title="Удалить">×</button>
+              <span>${p.issue ? "⚠ " + esc(p.issue) : esc(p.file)}</span></div>`).join("")}</div>
+          <button class="btn small" data-enroll="${esc(s.name)}">📷 Записать с камеры</button>
+        </div>`).join("")}</div>`;
+    $("#upBtn").onclick = async () => {
+      const f = $("#upFile").files[0], name = $("#upName").value.trim();
+      if (!f || !name) return toast("Укажите имя и выберите фото");
+      const fd = new FormData(); fd.append("name", name); fd.append("file", f);
+      try { const r = await api("photo", {method: "POST", body: fd}); toast(`Сохранено: ${r.saved}. Нажмите «Применить фото»`); show(); }
+      catch (e) { toast(e.message); }
+    };
+    m.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+      if (!confirm(`Удалить фото ${b.dataset.del}?`)) return;
+      try { await api("photo?file=" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); toast("Удалено. Нажмите «Применить фото»"); show(); }
+      catch (e) { toast(e.message); }
+    });
+    m.querySelectorAll("[data-enroll]").forEach((b) => b.onclick = () => { $("#upName").value = b.dataset.enroll; $("#enBtn").click(); });
+    $("#reloadBtn").onclick = async () => {
+      try {
+        const r = await api("reload_faces", {method: "POST"});
+        const issues = Object.keys(r.issues || {}).length;
+        toast(`Загружено сотрудников: ${Object.keys(r.employees).length}` + (issues ? `, проблемных фото: ${issues}` : ""));
+        show();
+      } catch (e) { toast(e.message); }
+    };
+    const poll = async () => {
+      const j = await api("enroll").catch(() => ({}));
+      if (j.running) {
+        const st = $("#enStatus");
+        if (st) st.innerHTML = `<span class="warn">Идёт запись ${esc(j.name)} с камеры ${j.ch} (${j.secs} сек, начало ${j.started})…</span>`;
+        return;
+      }
+      clearInterval(enrollTimer);
+      if (!j.name) return;
+      await show();
+      toast(j.error ? `${j.name}: ${j.error}`
+        : `${j.name}: сохранено ${j.saved.length} фото. Проверьте их, удалите чужие и нажмите «Применить фото»`, 9000);
+    };
+    $("#enBtn").onclick = async () => {
+      const name = $("#upName").value.trim();
+      if (!name) return toast("Впишите имя сотрудника");
+      try {
+        await api("enroll", {method: "POST", json: {name, ch: +$("#enCh").value, secs: +$("#enSecs").value}});
+        clearInterval(enrollTimer); enrollTimer = setInterval(poll, 3000); poll();
+      } catch (e) { toast(e.message); }
+    };
+    if (d.enroll && d.enroll.running) { clearInterval(enrollTimer); enrollTimer = setInterval(poll, 3000); poll(); }
+  },
+
+  // ---------- Журнал прихода/ухода ----------
+  async journal(m) {
+    const day = VIEWS.journal.day || today();
+    const [ev, st] = await Promise.all([api("events?day=" + day), api("staff").catch(() => ({staff: []}))]);
+    const names = st.staff.map((s) => s.name);
+    m.innerHTML = `
+      <div class="card"><div class="row">
+        <input type="date" id="jDay" value="${day}">
+        <span class="muted small">Записи сотрудников за день. Удалите ложную отметку или добавьте/исправьте вручную.</span></div></div>
+      <div class="card"><h3>Добавить или исправить</h3><div class="row">
+        <select id="jName">${names.map((n) => `<option>${esc(n)}</option>`).join("")}</select>
+        <select id="jType"><option value="исправить приход">Исправить приход (убрать всё раньше)</option><option>приход</option><option>уход</option></select>
+        <input type="time" id="jTime" step="60">
+        <button class="btn primary" id="jAdd">Сохранить</button></div></div>
+      <div class="card"><table><tr><th>Время</th><th>Сотрудник</th><th>Событие</th><th>Опоздание</th><th></th></tr>
+        ${ev.events.map((e, i) => `<tr><td>${e.time}</td><td>${esc(e.name)}</td><td>${e.type === "приход" ? '<span class="ok">приход</span>' : "уход"}</td>
+          <td>${e.late ? `<span class="warn">${e.late} мин</span>` : ""}</td>
+          <td><button class="btn danger small" data-i="${i}">Удалить</button></td></tr>`).join("") || '<tr><td colspan="5" class="muted">Записей нет</td></tr>'}
+      </table></div>`;
+    $("#jDay").onchange = (e) => { VIEWS.journal.day = e.target.value; show(); };
+    $("#jAdd").onclick = async () => {
+      if (!$("#jTime").value) return toast("Укажите время");
+      try { const r = await api("events", {method: "POST", json: {name: $("#jName").value, type: $("#jType").value, time: $("#jTime").value, day}});
+            toast("Сохранено" + (r.late ? `, опоздание ${r.late} мин` : "")); show(); } catch (e) { toast(e.message); }
+    };
+    m.querySelectorAll("[data-i]").forEach((b) => b.onclick = async () => {
+      const e = ev.events[+b.dataset.i];
+      if (!confirm(`Удалить: ${e.name}, ${e.type} в ${e.time}?`)) return;
+      try { await api("events", {method: "DELETE", json: e}); toast("Удалено"); show(); } catch (er) { toast(er.message); }
+    });
+  },
+
+  // ---------- Смены ----------
+  async shifts(m) {
+    const d = await api("settings"), s = d.settings;
+    const row = (n) => { const own = s.shifts[n.toLowerCase()] || {};
+      return `<tr><td>${esc(n)}</td><td><input type="time" data-n="${esc(n)}" data-k="start" value="${own.start || ""}" placeholder="${s.default_shift}"></td>
+              <td><input type="time" data-n="${esc(n)}" data-k="end" value="${own.end || ""}"></td>
+              <td class="small muted">${own.start || own.end ? "своя" : "общая " + s.default_shift + "–" + s.default_end}</td></tr>`; };
+    m.innerHTML = `
+      <div class="card"><h3>Общие правила филиала</h3><div class="formgrid">
+        <label class="f">Начало смены<input type="time" id="sStart" value="${s.default_shift}"></label>
+        <label class="f">Конец смены<input type="time" id="sEnd" value="${s.default_end}"></label>
+        <label class="f">Допуск опоздания, мин<input type="number" id="sGrace" value="${s.grace_minutes}" min="0" max="120"></label>
+        <label class="f">«Ушёл», если не видно, мин<input type="number" id="sLeave" value="${s.leave_timeout_min}" min="10" max="600"></label>
+        <label class="f">Приход засчитывается раньше начала, мин<input type="number" id="sEarly" value="${s.early_minutes}" min="0" max="720"></label>
+        <label class="f">Итог смены в Telegram<select id="sNotify"><option value="1" ${s.shift_end_notify ? "selected" : ""}>да</option><option value="0" ${s.shift_end_notify ? "" : "selected"}>нет</option></select></label>
+      </div></div>
+      <div class="card"><h3>Смены сотрудников</h3><div class="small muted" style="margin-bottom:8px">Пусто = общая смена. Ночная смена: конец раньше начала (например 18:30–02:00).</div>
+        <table><tr><th>Сотрудник</th><th>Начало</th><th>Конец</th><th></th></tr>${d.employees.map(row).join("")}</table>
+        <div class="row" style="margin-top:12px"><button class="btn primary" id="sSave">Сохранить</button><span class="small muted">применяется сразу, без перезапуска</span></div></div>`;
+    $("#sSave").onclick = async () => {
+      const shifts = {};
+      m.querySelectorAll("input[data-n]").forEach((i) => { if (i.value) (shifts[i.dataset.n.toLowerCase()] ||= {})[i.dataset.k] = i.value; });
+      try {
+        await api("settings", {method: "POST", json: {default_shift: $("#sStart").value, default_end: $("#sEnd").value,
+          grace_minutes: +$("#sGrace").value, leave_timeout_min: +$("#sLeave").value, early_minutes: +$("#sEarly").value,
+          shift_end_notify: $("#sNotify").value === "1", shifts}});
+        toast("Смены сохранены"); show();
+      } catch (e) { toast(e.message); }
+    };
+  },
+
+  // ---------- Камеры: живое видео, кадры, записи ----------
+  async cams(m) {
+    const d = await api("staff").catch(() => ({channels: {}}));
+    const staff = d.channels.staff || [], door = d.channels.door || [];
+    const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000 - 600000).toISOString().slice(0, 16);
+    m.innerHTML = `
+      <div class="card"><h3>Живое видео</h3><div class="small muted" style="margin-bottom:8px">Нажмите на камеру, чтобы включить (≈4 кадра/с, 5 минут).</div>
+        <div class="cams">${[...staff.map((c) => [c, "сотрудники"]), ...door.map((c) => [c, "дверь"])].map(([c, r]) =>
+          `<div class="cam" data-live="${c}"><span class="lbl">Камера ${c} · ${r}</span><button class="btn">▶ Включить</button></div>`).join("")}</div></div>
+      <div class="card"><h3>Просмотр записи</h3><div class="row">
+        <select id="rCh">${Array.from({length: 16}, (_, i) => `<option ${i + 1 === staff[0] ? "selected" : ""}>${i + 1}</option>`).join("")}</select>
+        <input type="datetime-local" id="rStart" value="${now}">
+        <select id="rMin"><option>1</option><option selected>2</option><option>5</option><option>10</option></select><span class="small muted">мин</span>
+        <select id="rSpeed"><option value="1">×1</option><option value="2" selected>×2</option><option value="4">×4</option></select>
+        <button class="btn primary" id="rPlay">▶ Смотреть</button>
+        <a class="btn" id="rDl" href="#">⬇ Скачать .dav</a></div>
+        <div class="cam" id="rView" style="margin-top:10px" hidden></div></div>
+      <div class="card"><h3>Все камеры регистратора</h3><button class="btn" id="snapAll">📸 Снять кадры со всех</button>
+        <div class="cams" id="snaps" style="margin-top:10px"></div></div>`;
+    m.querySelectorAll("[data-live]").forEach((el) => el.onclick = () => {
+      if (el.querySelector("img")) return;
+      el.innerHTML = `<span class="lbl">Камера ${el.dataset.live}</span><img src="${base()}live?ch=${el.dataset.live}&t=${Date.now()}">`;
+    });
+    const rq = () => `ch=${$("#rCh").value}&start=${$("#rStart").value}&minutes=${$("#rMin").value}`;
+    $("#rPlay").onclick = () => {
+      const v = $("#rView"); v.hidden = false;
+      v.innerHTML = `<span class="lbl">Загружаю запись с регистратора…</span><img src="${base()}replay?${rq()}&speed=${$("#rSpeed").value}&t=${Date.now()}" onerror="this.previousElementSibling.textContent='Записи нет или регистратор не ответил'">`;
+    };
+    $("#rDl").onclick = (e) => { e.preventDefault(); location.href = `${base()}record?${rq()}`; };
+    $("#snapAll").onclick = () => {
+      $("#snaps").innerHTML = Array.from({length: 16}, (_, i) =>
+        `<div class="cam"><span class="lbl">Камера ${i + 1}</span><img loading="lazy" src="${base()}snap?ch=${i + 1}&t=${Date.now()}" onerror="this.parentElement.remove()"></div>`).join("");
+    };
+  },
+
+  // ---------- Система: настройки, лог, перезапуск ----------
+  async system(m) {
+    const c = await api("config");
+    m.innerHTML = `
+      <div class="card"><h3>Программа</h3><div class="row">
+        <button class="btn danger" id="restart">⟳ Перезапустить программу</button>
+        <span class="small muted">камеры и бот остановятся примерно на 15 секунд</span></div>
+        <div class="small muted" style="margin-top:8px">Токен бота: ${c.secrets.BOT_TOKEN ? '<span class="ok">задан</span>' : '<span class="bad">нет</span>'} ·
+          пароль регистратора: ${c.secrets.NVR_PASSWORD ? '<span class="ok">задан</span>' : '<span class="bad">нет</span>'} ·
+          пароли меняются только на самом ПК в secrets.env</div></div>
+      <div class="card"><h3>Настройки филиала</h3><div class="formgrid">
+        ${c.keys.map((k) => `<label class="f">${esc(k.label)}<input data-key="${k.key}" value="${esc(k.value)}" placeholder="${k.key}"></label>`).join("")}</div>
+        <div class="row" style="margin-top:12px"><button class="btn primary" id="cSave">Сохранить</button><span class="small muted">${esc(c.note)}</span></div></div>
+      <div class="card"><h3>Лог программы</h3><div class="row"><button class="btn" id="logBtn">Обновить</button>
+        <label class="small muted"><input type="checkbox" id="logErr"> только ошибки и сотрудники</label></div><pre id="log">…</pre></div>`;
+    const loadLog = async () => {
+      try {
+        const r = await fetch(base() + "log?lines=400"); let t = await r.text();
+        if ($("#logErr").checked) t = t.split("\n").filter((l) => !l.startsWith("Клиент:")).join("\n");
+        $("#log").textContent = t; $("#log").scrollTop = 1e9;
+      } catch (e) { $("#log").textContent = e.message; }
+    };
+    $("#logBtn").onclick = loadLog; $("#logErr").onchange = loadLog; loadLog();
+    $("#cSave").onclick = async () => {
+      const data = {}; m.querySelectorAll("[data-key]").forEach((i) => (data[i.dataset.key] = i.value));
+      try { await api("config", {method: "POST", json: data}); toast("Сохранено. Перезапустите программу, чтобы применить"); } catch (e) { toast(e.message); }
+    };
+    $("#restart").onclick = async () => {
+      if (!confirm("Перезапустить программу учёта в этом филиале?")) return;
+      try { const r = await api("restart", {method: "POST"}); toast(r.note, 6000); } catch (e) { toast(e.message); }
+    };
+  },
+};
+
+(async () => {
+  try { const s = JSON.parse(localStorage.getItem("panel") || "{}"); cur = s.cur || 0; tab = s.tab || tab; } catch (e) {}
+  branches = await (await fetch(location.origin + "/panel/branches")).json();
+  if (!branches.length) { $("#main").innerHTML = `<div class="card">Филиалы не настроены: PANEL_BRANCHES в secrets.env</div>`; return; }
+  if (!branches.some((b) => b.id === cur)) cur = 0;
+  show();
+})();
+</script>
+</body>
+</html>
