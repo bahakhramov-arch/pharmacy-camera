@@ -45,6 +45,14 @@ def create_app(config):
                 return {}
         return {}
 
+    # Пароль управления (камеры, видео, фото, журнал, настройки ПК): логин admin.
+    # У report (заведующая, координатор) - только отчёты и смены.
+    control_password = (os.environ.get("CONTROL_PASSWORD") or os.environ.get("PANEL_PASSWORD") or "")
+
+    def is_admin(auth):
+        return bool(control_password and auth and auth.username == "admin"
+                    and auth.password == control_password)
+
     def check_auth(user, pwd):
         return user == "report" and pwd == password
 
@@ -54,9 +62,22 @@ def create_app(config):
             if not password:
                 return f(*args, **kwargs)
             auth = request.authorization
-            if not auth or not check_auth(auth.username, auth.password):
+            if not (is_admin(auth) or (auth and check_auth(auth.username, auth.password))):
                 return Response("Нужна авторизация", 401,
                                 {"WWW-Authenticate": 'Basic realm="Apteka 5plus", charset="UTF-8"'})
+            return f(*args, **kwargs)
+        return decorated
+
+    def requires_admin(f):
+        """Камеры, видео и управление - только admin с CONTROL_PASSWORD (не пароль report)."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not control_password or not password:
+                return jsonify({"error": "Управление выключено: задайте REPORTS_PASSWORD и "
+                                         "CONTROL_PASSWORD в secrets.env"}), 403
+            if not is_admin(request.authorization):
+                return Response("Нужен вход администратора", 401,
+                                {"WWW-Authenticate": 'Basic realm="Apteka 5plus admin", charset="UTF-8"'})
             return f(*args, **kwargs)
         return decorated
 
@@ -234,7 +255,7 @@ def create_app(config):
         return ch if 1 <= ch <= 32 else None
 
     @app.get("/api/record")
-    @requires_auth
+    @requires_admin
     def record():
         """Запись канала как .dav: /api/record?ch=6&start=2026-10-25T13:22&minutes=3 (до 15 мин)."""
         if not password:
@@ -270,7 +291,7 @@ def create_app(config):
                         headers={"Content-Disposition": f"attachment; filename={name}"})
 
     @app.get("/api/snap")
-    @requires_auth
+    @requires_admin
     def snap():
         """Кадр с камеры сейчас (JPEG): /api/snap?ch=5"""
         if not password:
@@ -294,7 +315,7 @@ def create_app(config):
         return Response(cv2.imencode(".jpg", frame)[1].tobytes(), mimetype="image/jpeg")
 
     @app.get("/api/log")
-    @requires_auth
+    @requires_admin
     def log_tail():
         """Последние строки logs\\run.log: /api/log?lines=200 (для проверки сбоев удалённо)."""
         if not password:
@@ -318,7 +339,7 @@ def create_app(config):
 
     import control_api
     import panel
-    control_api.register(app, config, requires_auth, BASE_DIR)
+    control_api.register(app, config, requires_admin, BASE_DIR)
     panel.register(app, config)
     return app
 

@@ -3,10 +3,10 @@
 
 Включается в secrets.env главного ПК:
     PANEL_PASSWORD=сложный_пароль              (вход: логин admin)
-    PANEL_BRANCHES=local;https://dostlik.5plyus.uz|пароль_сайта_Достлика
+    PANEL_BRANCHES=local;https://antey.5plyus.uz|CONTROL_PASSWORD_Антея
 
-«local» - этот же ПК. Панель ходит на сайты филиалов под их логином report, поэтому
-пароли филиалов хранятся только здесь, в secrets.env главного ПК, а не в браузере.
+«local» - этот же ПК. Панель ходит на сайты филиалов под логином admin с их
+CONTROL_PASSWORD (пароль после «|»); пароли хранятся только в secrets.env главного ПК.
 """
 
 import os
@@ -35,7 +35,7 @@ def _branches(config):
         url = url.strip()
         if url == "local":
             url = f"http://127.0.0.1:{os.environ.get('REPORTS_PORT', '8080')}"
-            pwd = config.get("password") or ""
+            pwd = os.environ.get("CONTROL_PASSWORD") or os.environ.get("PANEL_PASSWORD") or ""
             name = name or config.get("branch", "")
         out.append({"name": name.strip(), "url": url.rstrip("/"), "password": pwd.strip()})
     return out
@@ -89,13 +89,13 @@ def register(app, config):
         try:
             r = requests.request(request.method, f"{b['url']}/{rest}", params=request.args,
                                  data=request.get_data(), headers=headers,
-                                 auth=("report", b["password"]), stream=True,
+                                 auth=("admin", b["password"]), stream=True,
                                  timeout=(10, 300))
         except requests.RequestException as e:
             return jsonify({"error": f"Филиал «{_name(b)}» не отвечает: {e.__class__.__name__}"}), 502
         if r.status_code in (401, 530, 502, 503, 504) and "json" not in r.headers.get("content-type", ""):
             r.close()
-            msg = ("неверный пароль филиала в PANEL_BRANCHES" if r.status_code == 401
+            msg = ("неверный пароль управления филиала (CONTROL_PASSWORD) в PANEL_BRANCHES" if r.status_code == 401
                    else "сайт филиала не запущен (ПК выключен или программа остановлена)")
             return jsonify({"error": f"Филиал «{_name(b)}»: {msg}"}), 502
 

@@ -2,7 +2,7 @@
 """API управления филиалом для панели (/panel): фото сотрудников, запись лица с камеры,
 правка журнала, настройки secrets.env, перезапуск, живое видео и просмотр записи.
 
-Всё только при заданном пароле сайта (REPORTS_PASSWORD). Функции программы учёта
+Всё только для admin с паролем CONTROL_PASSWORD (не для report). Функции программы учёта
 (запись лица, перезагрузка фото, перезапуск) приходят через config["control"]; если сайт
 запущен отдельно (python web_reports.py), эти кнопки отвечают 501.
 """
@@ -37,8 +37,7 @@ CONFIG_KEYS = {
 SECRET_KEYS = ("BOT_TOKEN", "NVR_PASSWORD", "REPORTS_PASSWORD", "PANEL_PASSWORD")
 
 
-def register(app, config, requires_auth, base_dir):
-    password = config.get("password") or ""
+def register(app, config, requires_admin, base_dir):
     ctl = config.get("control") or {}
     env_path = ctl.get("env_path") or os.path.join(base_dir, "secrets.env")
     photos_dir = ctl.get("photos_dir") or os.path.join(base_dir, "photos")
@@ -46,14 +45,7 @@ def register(app, config, requires_auth, base_dir):
     job = {"running": False}
     job_lock = threading.Lock()
 
-    def guarded(f):
-        """Пароль сайта обязателен: без него управлять филиалом может любой в сети."""
-        def wrapper(*a, **kw):
-            if not password:
-                return jsonify({"error": "Управление доступно только при заданном пароле сайта"}), 403
-            return f(*a, **kw)
-        wrapper.__name__ = f.__name__
-        return requires_auth(wrapper)
+    guarded = requires_admin     # только admin с CONTROL_PASSWORD
 
     def need(key):
         fn = ctl.get(key)
