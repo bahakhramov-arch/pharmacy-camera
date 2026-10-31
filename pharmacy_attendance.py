@@ -195,6 +195,9 @@ DETECT_INTERVAL_SEC = 0.15             # анализировать не чащ�
 LOG_FILE = "events.csv"
 LAST_SEEN_FILE = "last_seen.json"
 REPORT_STATE_FILE = "report_state.json"
+HEARTBEAT_FILE = "heartbeat.json"     # «программа жива» раз в 30 с - по нему видно простои
+OUTAGES_FILE = "outages.csv"          # простои: программа или ПК не работали
+OUTAGE_MIN_SEC = 5 * 60
 # окна с камерами; run_hidden.vbs запускает с SHOW_WINDOW=0 (фон, без окон)
 SHOW_WINDOW = os.environ.get("SHOW_WINDOW", "1").strip() not in ("0", "no", "false")
 WINDOW_TRANSLIT = False                # True = в окне писать имена латиницей (OpenCV не рисует кириллицу); на журнал/Telegram не влияет
@@ -619,6 +622,63 @@ def check_telegram():
 
 # ------------------------- Учёт прихода / ухода -------------------------
 
+OUTAGES = []   # [(начало, конец)] - когда программа не работала (из outages.csv)
+
+
+def load_outages():
+    OUTAGES.clear()
+    if os.path.exists(OUTAGES_FILE):
+        with open(OUTAGES_FILE, encoding="utf-8-sig", newline="") as f:
+            for r in csv.reader(f):
+                try:
+                    OUTAGES.append((dt.datetime.fromisoformat(r[0]), dt.datetime.fromisoformat(r[1])))
+                except (ValueError, IndexError):
+                    pass
+
+
+def outage_after(when):
+    """Простой, начавшийся сразу после when (человек «пропал», потому что программа не работала)."""
+    timeout = dt.timedelta(minutes=settings.load()["leave_timeout_min"])
+    for s, e in OUTAGES:
+        if when - dt.timedelta(minutes=2) <= s <= when + timeout:
+            return s, e
+    return None
+
+
+def _boot_time():
+    try:
+        import ctypes
+        ms = ctypes.windll.kernel32.GetTickCount64()
+        return dt.datetime.now() - dt.timedelta(milliseconds=ms)
+    except Exception:
+        return None
+
+
+def check_outage():
+    """При запуске: если программа долго не работала - записать простой и сообщить владельцу.
+    Иначе сотрудникам, которые были на месте, записался бы «ранний уход»."""
+    load_outages()
+    hb = load_json(HEARTBEAT_FILE, {}).get("alive")
+    now = dt.datetime.now()
+    try:
+        start = dt.datetime.fromisoformat(hb) if hb else None
+    except ValueError:
+        start = None
+    if not start or (now - start).total_seconds() < OUTAGE_MIN_SEC:
+        return None
+    with open(OUTAGES_FILE, "a", encoding="utf-8-sig", newline="") as f:
+        csv.writer(f).writerow([start.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")])
+    OUTAGES.append((start, now))
+    boot = _boot_time()
+    why = (f"ПК перезагружался (включён в {boot:%H:%M})" if boot and start <= boot <= now
+           else "программа была остановлена или ПК спал")
+    text = (f"⚠️ {BRANCH}: система учёта не работала с {start:%d.%m %H:%M} до {now:%H:%M} - {why}.\n"
+            f"Приходы и уходы за это время не записаны; уходы сотрудников в этот промежуток - "
+            f"«неизвестно», а не «ранний уход». Исправить: панель → Журнал.")
+    print(text)
+    return text
+
+
 class Attendance:
     def __init__(self):
         self.lock = threading.RLock()
@@ -703,6 +763,7 @@ class Attendance:
             self._last_save = time.time()
             save_json(LAST_SEEN_FILE,
                       {n: t.isoformat() for n, t in self.snapshot().items()})
+            save_json(HEARTBEAT_FILE, {"alive": dt.datetime.now().isoformat(timespec="seconds")})
 
     def resync(self):
         """После правки журнала в панели: кто «на месте» и чей приход уже был - заново по журналу."""
@@ -805,7 +866,10 @@ class Attendance:
             self.log_event(when, name, "уход")
         d = workday(when, DAY_START_HOUR)
         info = build_days(read_events(LOG_FILE), d, d, day_start=DAY_START_HOUR).get((d, name))
-        text = f"🔴 {name}, филиал {BRANCH}, ушёл(ла) в {when:%H:%M}"
+        gap = outage_after(when)
+        text = (f"🔴 {name}, филиал {BRANCH}, ушёл(ла) в {when:%H:%M}" if not gap else
+                f"❔ {name}, филиал {BRANCH}: последний раз на камере в {when:%H:%M}, "
+                f"дальше система не работала до {gap[1]:%H:%M} - уход неизвестен")
         if info:
             text += (f"\nПришёл(ла) в {info['first_in']:%H:%M}, "
                      f"отработано за день: {fmt_dur(info['worked_sec'])}")
@@ -1043,7 +1107,12 @@ def shift_summary(att, name, day, start, end):
     last = evs[-1]
     present = name in att.present_snapshot()
     seen = att.snapshot().get(name)
-    if last["type"] == "уход" and not present:
+    gap = outage_after(last["when"]) if last["type"] == "уход" else None
+    if gap and not present:
+        lines.append(f"Ушёл(ла): ❔ неизвестно - система не работала {gap[0]:%H:%M}–{gap[1]:%H:%M} "
+                     f"(последний раз на камере в {last['when']:%H:%M})")
+        notes.append("нет данных из-за простоя системы")
+    elif last["type"] == "уход" and not present:
         early = int((end_dt - last["when"]).total_seconds() // 60)
         if early > grace:
             lines.append(f"Ушёл(ла): {last['when']:%H:%M} - ⚠️ раньше конца смены на {fmt_dur(early * 60)}")
@@ -1420,6 +1489,7 @@ def main():
     if not check_telegram():
         print("Камеры запущу, но сообщения в Telegram могут не приходить.")
 
+    outage_text = check_outage()
     att = Attendance()
     visitors = VisitorLog(VISITORS_FILE, BRANCH)
     n_in, n_out = visitors.restore_today(DAY_START_HOUR)
@@ -1514,6 +1584,8 @@ def main():
         send_telegram(f"🟢 Система учёта запущена, филиал {BRANCH}, камер: {len(readers)}\n"
                       f"Сотрудники: {', '.join(sorted(db))}\n"
                       f"Команды: /today /visitors /day /week /month /help{extra}", wait=True)
+    if outage_text and CHAT_IDS:
+        send_telegram(outage_text, wait=True, to=CHAT_IDS[:1])     # только владельцу
 
     try:
         while True:
