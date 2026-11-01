@@ -129,6 +129,7 @@ DAY_START_HOUR = 0
 
 # --- Уход и перерывы ---
 SEND_RETURN_MESSAGES = True            # писать «вернулся» после перерыва
+OFF_SCHEDULE_MIN = 10                  # вне своей смены: приход, если виден дольше N минут
 
 # --- Посетители: вход / выход по линии у двери (камеры VISITOR_CHANNELS) ---
 COUNT_VISITORS = True
@@ -698,6 +699,7 @@ class Attendance:
         # имя -> начало окна смены, в которое уже был «первый приход» (см. settings.window_start)
         self.shift_arrived = {}
         self._quiet = {}
+        self._offshift = {}     # имя -> когда впервые увидели вне его смены (ждём подтверждения)
         self._last_save = 0.0
         self._recover()
 
@@ -833,12 +835,27 @@ class Attendance:
         with self.lock:
             # новый приход - только в окне смены (ночью камеру может обмануть уборщица,
             # охранник, отражение). Кто уже на месте и задержался - считается как обычно.
+            off_schedule = None
+            seen_at = now
             if name not in self.present and not settings.arrival_allowed(name, now):
-                if time.time() - self._quiet.get(("off", name), 0) > 600:
-                    self._quiet[("off", name)] = time.time()
-                    print(f"{name}: распознан(а) в {now:%H:%M} - вне смены, приход не засчитан")
-                return
-            self.last_seen[name] = now
+                # Смены меняются (вышел утром вместо вечера): в часы работы аптеки засчитываем,
+                # если человек виден дольше OFF_SCHEDULE_MIN минут. Ночью - нет (уборщица, охрана).
+                first = self._offshift.get(name)
+                if first and (now - first).total_seconds() > 30 * 60:
+                    first = None                    # давно не видели - начинаем заново
+                if (not settings.branch_open(now) or first is None
+                        or (now - first).total_seconds() < OFF_SCHEDULE_MIN * 60):
+                    if first is None and settings.branch_open(now):
+                        self._offshift[name] = now
+                    if time.time() - self._quiet.get(("off", name), 0) > 600:
+                        self._quiet[("off", name)] = time.time()
+                        print(f"{name}: распознан(а) в {now:%H:%M} - вне смены"
+                              + (", жду подтверждения" if settings.branch_open(now) else ", приход не засчитан"))
+                    return
+                off_schedule = "{}–{}".format(*settings.shift_range(name))
+                now = first                         # приход - с первой отметки
+                self._offshift.pop(name, None)
+            self.last_seen[name] = seen_at
             if name in self.present:
                 if time.time() - self._quiet.get(name, 0) > 300:
                     self._quiet[name] = time.time()
@@ -856,6 +873,8 @@ class Attendance:
         if first:
             text = (f"⚠️ {name}, филиал {BRANCH}, пришёл(ла) в {t} (опоздание {late} мин)"
                     if late else f"✅ {name}, филиал {BRANCH}, пришёл(ла) в {t}")
+            if off_schedule:
+                text += f"\n📅 не по графику (смена {off_schedule}) - поправьте смену, если она изменилась"
         else:
             text = f"🔄 {name}, филиал {BRANCH}, вернулся(ась) в {t}"
         print(text)

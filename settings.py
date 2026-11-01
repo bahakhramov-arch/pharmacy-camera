@@ -157,3 +157,13 @@ def window_start(name, when):
     if ws > when:
         ws -= _dt.timedelta(days=1)
     return ws
+
+
+def branch_open(when):
+    """Рабочее время аптеки (общая смена, с тем же запасом до начала), без учёта личных смен."""
+    s = load()
+    sh, sm = map(int, s["default_shift"].split(":"))
+    eh, em = map(int, s["default_end"].split(":"))
+    w_from = (sh * 60 + sm - s["early_minutes"]) % 1440
+    span = (eh * 60 + em - w_from) % 1440 or 1440
+    return (when.hour * 60 + when.minute - w_from) % 1440 < span
