@@ -138,6 +138,10 @@ VISITORS_FILE = "visitors.csv"
 # Проще всего задать мышкой:  python door_setup.py  (сохранит в DOOR_LINES_FILE).
 # В окне камеры линия рисуется жёлтым, стрелка IN смотрит внутрь.
 DOOR_LINES_FILE = "door_lines.json"
+# Зоны сотрудников: {"6": [[x, y], ...]} - многоугольник в долях кадра (0..1). Лица вне зоны
+# камеры не распознаём: клиенты на скамейке и перед прилавком не станут «сотрудниками».
+# Камеры без зоны - весь кадр. Файл у каждого филиала свой.
+STAFF_ZONES_FILE = "staff_zones.json"
 DOOR_DEFAULT = {"line": [[0.60, 0.62], [0.80, 1.00]],   # примерно: порог двери на камере 1
                 "inside": [0.90, 0.75]}                 # (улица слева, аптека справа)
 DOOR_ANCHOR = "bottom"                 # "bottom" - ноги (камера под углом), "center" - камера сверху
@@ -1571,6 +1575,14 @@ def main():
         print(f"Сайт отчётов: {reports_url}")
 
     today = workday(dt.datetime.now(), DAY_START_HOUR)
+    zones = {}
+    for ch, poly in load_json(STAFF_ZONES_FILE, {}).items():
+        try:
+            zones[camera_label(int(ch))] = np.array(poly, dtype=np.float32)
+        except (ValueError, TypeError):
+            print(f"staff_zones.json: камера {ch} - неверная зона, пропускаю")
+    if zones:
+        print("Зоны сотрудников: " + ", ".join(sorted(zones)))
     streaks = {r.name: {} for r in readers}
     last_proc = {r.name: 0.0 for r in readers}
     last_thorough = {r.name: 0.0 for r in readers}
@@ -1630,6 +1642,12 @@ def main():
                     best_lbl = ""
                     for face in (faces if faces is not None else []):
                         x, y, w, h = map(int, face[:4])
+                        zone = zones.get(r.name)
+                        if zone is not None:
+                            fh_, fw_ = frame.shape[:2]
+                            center = ((x + w / 2) / fw_, (y + h / 2) / fh_)
+                            if cv2.pointPolygonTest(zone, center, False) < 0:
+                                continue          # клиентская часть кадра
                         if w < MIN_FACE_WIDTH or face[-1] < MIN_ID_FACE_SCORE:
                             if SHOW_WINDOW:
                                 cv2.rectangle(frame, (x, y), (x + w, y + h), (180, 180, 0), 1)
