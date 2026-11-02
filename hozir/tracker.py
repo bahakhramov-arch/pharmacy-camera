@@ -32,6 +32,8 @@ class Track:
         self.hits = 1
         self.misses = 0
         self.confirmed = False
+        self.start_center = self.box[:2] + self.box[2:] / 2
+        self.max_shift = 0.0          # как далеко уходил от начальной точки (пикс)
 
     def predict(self, t):
         """Где трек должен быть сейчас (простая постоянная скорость)."""
@@ -48,6 +50,8 @@ class Track:
             c_new = box[:2] + box[2:] / 2
             self.vel = 0.6 * self.vel + 0.4 * (c_new - c_old) / dt
         self.box = 0.3 * self.box + 0.7 * box             # сглаживаем дрожание рамки
+        c = self.box[:2] + self.box[2:] / 2
+        self.max_shift = max(self.max_shift, float(((c - self.start_center) ** 2).sum() ** 0.5))
         self.score = score
         self.last_t = t
         self.hits += 1
@@ -107,3 +111,8 @@ class Tracker:
             self.tracks.append(Track(high[j][:4], high[j][4], t))
         self.tracks = [tr for tr in self.tracks if t - tr.last_t <= self.max_lost_sec]
         return [tr for tr in self.tracks if tr.confirmed]
+
+    def is_static(self, tr, min_sec=30.0):
+        """Неподвижная «фигура» дольше min_sec - предмет на прилавке, а не человек.
+        Человек за кассой тоже сидит, но всё равно сдвигается больше чем на треть своей ширины."""
+        return tr.last_t - tr.first_t >= min_sec and tr.max_shift < tr.box[2] * 0.35

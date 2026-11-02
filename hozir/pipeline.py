@@ -50,7 +50,9 @@ class CameraPipeline:
         self.alive = {}          # track id -> Track
 
     def _faces(self, frame):
-        import pharmacy_attendance as pa       # тот же letterbox-детектор, что и сейчас
+        pa = sys.modules.get("__main__")      # внутри программы учёта - она сама
+        if not hasattr(pa, "detect_faces"):
+            import pharmacy_attendance as pa   # прогон по записи (replay.py)
         faces = pa.nms_faces(pa.detect_faces(self.faces, frame, thorough=False))
         return [] if faces is None else list(faces)
 
