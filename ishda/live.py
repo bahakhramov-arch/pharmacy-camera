@@ -50,11 +50,43 @@ class IshdaLive:
         self.branch = branch
         self.cams = {label(ch): CameraPipeline(db, person_score=0.25, roi=zones.get(ch)) for ch in channels}
         self.presence = Presence(float(env("LEAVE_MIN", "20")))
+        self.day = dt.date.today()
+        self._recover()
         self.latest = {}
         self.lock = threading.Lock()
         self.ms = 0.0
         threading.Thread(target=self._run, daemon=True, name="ishda").start()
         print(f"[Ishda] теневой режим: камеры {', '.join(self.cams)}")
+
+    def _recover(self):
+        """После перезапуска программы: кто по журналу Ishda сейчас на работе - тот на месте
+        (иначе каждый перезапуск давал всем новый «приход»). Таймаут ухода - от момента запуска."""
+        if not os.path.exists(EVENTS_FILE):
+            return
+        today, last = self.day.isoformat(), {}
+        with open(EVENTS_FILE, encoding="utf-8-sig", newline="") as f:
+            for r in csv.reader(f):
+                if len(r) >= 5 and r[0] == today:
+                    last[r[2]] = r
+        now = time.time()
+        for name, r in last.items():
+            if r[4] == "приход":
+                since = dt.datetime.fromisoformat(f"{r[0]} {r[1]}").timestamp()
+                self.presence.state[name] = {"present": True, "since": since, "last": now}
+        if self.presence.present():
+            print("[Ishda] после перезапуска на месте: " + ", ".join(self.presence.present()))
+
+    def _new_day(self, now):
+        """Полночь: кто ещё «на месте» - уход в момент, когда его видели последний раз
+        (но не позже 23:59:59), новый день начинается с чистого листа."""
+        end = dt.datetime.combine(self.day, dt.time(23, 59, 59)).timestamp()
+        for name in self.presence.present():
+            t_last = min(self.presence.state[name]["last"], end)
+            when = dt.datetime.fromtimestamp(t_last)
+            print(f"[Ishda] {name}: уход в {when:%H:%M:%S} (конец дня)")
+            self._log(when, name, "уход")
+        self.presence.state.clear()
+        self.day = dt.date.fromtimestamp(now)
 
     def set_db(self, db):
         for p in self.cams.values():
@@ -70,6 +102,8 @@ class IshdaLive:
         period = 1.0 / self.fps
         while True:
             t0 = time.time()
+            if dt.date.fromtimestamp(t0) != self.day:
+                self._new_day(t0)
             with self.lock:
                 frames, self.latest = self.latest, {}
             named = {}
@@ -84,6 +118,8 @@ class IshdaLive:
                     if mb is not None and (tr.box[1] + tr.box[3]) / h < mb:
                         continue
                     named[name] = min(named.get(name, tr.first_t), tr.first_t)
+            day_start = dt.datetime.combine(self.day, dt.time()).timestamp()
+            named = {n: max(t_first, day_start) for n, t_first in named.items()}   # трек со вчера
             # треки, которые сейчас не в кадре, но не «умерли», не учитываются - уход по таймауту
             for t_ev, name, kind in self.presence.update(t0, named):
                 when = dt.datetime.fromtimestamp(t_ev)

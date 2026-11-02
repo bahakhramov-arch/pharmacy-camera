@@ -47,6 +47,8 @@ class CameraPipeline:
         self.face_min_score = face_min_score
         self.inherit_sec = inherit_sec
         self.ended = []          # [(время конца, рамка, track id)] - для наследования имени
+        self.checked = {}        # track id -> когда последний раз считали его лицо
+        self.recheck_sec = 10.0  # уже узнанного перепроверяем не чаще (лица - главная нагрузка)
         self.alive = {}          # track id -> Track
 
     def _faces(self, frame):
@@ -75,9 +77,11 @@ class CameraPipeline:
                 self.alive[tr.id] = tr
                 self._try_inherit(tr)
 
-        # лица -> к фигуре, в верхней части которой лежит центр лица
+        # лица нужны только трекам без имени или давно не проверенным
+        need = {tr.id for tr in tracks
+                if self.ident.name(tr.id) is None or t - self.checked.get(tr.id, -1e9) >= self.recheck_sec}
         out_faces = {}
-        for face in self._faces(frame):
+        for face in (self._faces(frame) if need else []):
             fx, fy, fw, fh = face[:4]
             if fw < self.face_min_width or face[-1] < self.face_min_score:
                 continue
@@ -88,7 +92,7 @@ class CameraPipeline:
                 if x <= cx <= x + bw and y <= cy <= y + bh * 0.5:
                     if owner is None or bw * bh < owner.box[2] * owner.box[3]:
                         owner = tr
-            if owner is None:
+            if owner is None or owner.id not in need:
                 continue
             try:
                 feat = self.rec.feature(self.rec.alignCrop(frame, face))
@@ -96,6 +100,8 @@ class CameraPipeline:
                 continue
             self.ident.add(owner.id, face_scores(feat, self.db, self.rec))
             out_faces[owner.id] = face
+            if self.ident.name(owner.id):
+                self.checked[owner.id] = t
         return frame, [(tr, self.ident.name(tr.id), out_faces.get(tr.id)) for tr in tracks]
 
     def _try_inherit(self, tr):
