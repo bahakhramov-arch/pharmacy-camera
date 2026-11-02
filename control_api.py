@@ -208,6 +208,21 @@ def register(app, config, requires_admin, base_dir):
         out = [{"date": r[0], "time": r[1], "name": r[2], "type": r[4],
                 "late": int(r[5]) if len(r) > 5 and r[5].lstrip("-").isdigit() else 0}
                for r in body if len(r) >= 5 and r[0] == day]
+        out.sort(key=lambda e: e["time"])        # в файле порядок записи, не времени
+        return jsonify({"day": day, "events": out})
+
+    @app.get("/api/ishda_events")
+    @guarded
+    def ishda_events():
+        """Журнал Ishda AI (теневой режим) за день - для сверки со старой системой."""
+        day = request.args.get("day") or dt.date.today().isoformat()
+        path = os.path.join(base_dir, "ishda_events.csv")
+        out = []
+        if os.path.exists(path):
+            with open(path, encoding="utf-8-sig", newline="") as f:
+                out = [{"date": r[0], "time": r[1], "name": r[2], "type": r[4]}
+                       for r in csv.reader(f) if len(r) >= 5 and r[0] == day]
+        out.sort(key=lambda e: e["time"])
         return jsonify({"day": day, "events": out})
 
     @app.post("/api/events")
