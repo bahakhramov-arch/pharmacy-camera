@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Прогон Hozir по записи с регистратора - проверка без живых камер.
+"""Прогон Ishda AI по записи с регистратора - проверка без живых камер.
 
-    python hozir\\replay.py запись.dav папка_результата [кадров_в_секунду] [папка_фото]
+    python ishda\\replay.py запись.dav папка_результата [кадров_в_секунду] [папка_фото]
 
 Сохраняет кадры с рамками (каждые 10 с), итог по трекам и скорость обработки.
 """
@@ -15,7 +15,7 @@ import cv2
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from hozir.pipeline import CameraPipeline     # noqa: E402
+from ishda.pipeline import CameraPipeline     # noqa: E402
 
 COLORS = [(255, 0, 180), (0, 200, 255), (0, 220, 0), (255, 160, 0), (0, 0, 255), (200, 200, 0)]
 

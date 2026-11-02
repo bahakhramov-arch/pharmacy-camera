@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Hozir: одна камера = фигуры (детектор людей) + слежение + лица, приклеенные к фигурам.
+"""Ishda AI: одна камера = фигуры (детектор людей) + слежение + лица, приклеенные к фигурам.
 
 Отличие от старой системы: присутствие определяется по фигуре, которую видно почти всегда,
 а лицо нужно лишь несколько раз, чтобы узнать, кто это.
@@ -17,8 +17,8 @@ sys.path.insert(0, ROOT)
 
 from visitors import PersonDetector            # noqa: E402  YOLOX, уже используется у двери
 
-from hozir.identity import Identity           # noqa: E402
-from hozir.tracker import Tracker             # noqa: E402
+from ishda.identity import Identity           # noqa: E402
+from ishda.tracker import Tracker             # noqa: E402
 
 MAX_W = 1920
 

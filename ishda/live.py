@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Hozir в программе учёта: «теневой режим».
+"""Ishda AI в программе учёта: «теневой режим».
 
 Работает параллельно со старым распознаванием в своём потоке и пишет приходы/уходы
-в hozir_events.csv (без уведомлений) - чтобы сравнить со старой системой и реальностью.
+в ishda_events.csv (без уведомлений) - чтобы сравнить со старой системой и реальностью.
 
-secrets.env:
-    HOZIR=1
-    HOZIR_ZONES=6:0.42,0,1,0.7;5:0,0,1,1      зона поиска людей на камере (доли кадра)
-    HOZIR_MIN_BOTTOM=5:0.55                   низ фигуры ниже этой линии (камера за прилавком:
+secrets.env (старые имена HOZIR_* тоже работают):
+    ISHDA=1
+    ISHDA_ZONES=6:0.42,0,1,0.7;5:0,0,1,1      зона поиска людей на камере (доли кадра)
+    ISHDA_MIN_BOTTOM=5:0.55                   низ фигуры ниже этой линии (камера за прилавком:
                                               клиенты по ту сторону прилавка видны только по пояс)
-    HOZIR_FPS=4
+    ISHDA_FPS=4
 """
 
 import csv
@@ -18,10 +18,15 @@ import os
 import threading
 import time
 
-from hozir.pipeline import CameraPipeline
-from hozir.presence import Presence
+from ishda.pipeline import CameraPipeline
+from ishda.presence import Presence
 
-EVENTS_FILE = "hozir_events.csv"
+EVENTS_FILE = "ishda_events.csv"
+
+
+def env(key, default=None):
+    """ISHDA_<key>, для совместимости - HOZIR_<key> (рабочее имя проекта)."""
+    return os.environ.get("ISHDA_" + key, os.environ.get("HOZIR_" + key, default))
 
 
 def _parse(raw, cast):
@@ -36,20 +41,20 @@ def _parse(raw, cast):
     return out
 
 
-class HozirLive:
+class IshdaLive:
     def __init__(self, db, branch, channels, label):
-        zones = _parse(os.environ.get("HOZIR_ZONES"), lambda v: tuple(float(x) for x in v.split(",")))
+        zones = _parse(env("ZONES"), lambda v: tuple(float(x) for x in v.split(",")))
         self.min_bottom = {label(ch): v for ch, v in
-                           _parse(os.environ.get("HOZIR_MIN_BOTTOM"), float).items()}
-        self.fps = float(os.environ.get("HOZIR_FPS", "4"))
+                           _parse(env("MIN_BOTTOM"), float).items()}
+        self.fps = float(env("FPS", "4"))
         self.branch = branch
         self.cams = {label(ch): CameraPipeline(db, person_score=0.25, roi=zones.get(ch)) for ch in channels}
-        self.presence = Presence(float(os.environ.get("HOZIR_LEAVE_MIN", "20")))
+        self.presence = Presence(float(env("LEAVE_MIN", "20")))
         self.latest = {}
         self.lock = threading.Lock()
         self.ms = 0.0
-        threading.Thread(target=self._run, daemon=True, name="hozir").start()
-        print(f"[Hozir] теневой режим: камеры {', '.join(self.cams)}")
+        threading.Thread(target=self._run, daemon=True, name="ishda").start()
+        print(f"[Ishda] теневой режим: камеры {', '.join(self.cams)}")
 
     def set_db(self, db):
         for p in self.cams.values():
@@ -82,7 +87,7 @@ class HozirLive:
             # треки, которые сейчас не в кадре, но не «умерли», не учитываются - уход по таймауту
             for t_ev, name, kind in self.presence.update(t0, named):
                 when = dt.datetime.fromtimestamp(t_ev)
-                print(f"[Hozir] {name}: {kind} в {when:%H:%M:%S}")
+                print(f"[Ishda] {name}: {kind} в {when:%H:%M:%S}")
                 self._log(when, name, kind)
             spent = time.time() - t0
             if frames:                      # среднее время обработки кадров одного круга

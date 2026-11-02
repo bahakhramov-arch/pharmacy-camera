@@ -1492,13 +1492,13 @@ def main():
         return
     EMPLOYEES[:] = sorted(db, key=str.lower)
     faces_db = {"db": db}      # панель управления заменяет словарь целиком (перезагрузка фото)
-    hozir = None
-    if os.environ.get("HOZIR", "").strip() == "1":      # новая система в теневом режиме
+    ishda = None
+    if os.environ.get("ISHDA", os.environ.get("HOZIR", "")).strip() == "1":   # Ishda AI, теневой режим
         try:
-            from hozir.live import HozirLive
-            hozir = HozirLive(db, BRANCH, STAFF_CHANNELS, camera_label)
+            from ishda.live import IshdaLive
+            ishda = IshdaLive(db, BRANCH, STAFF_CHANNELS, camera_label)
         except Exception as e:
-            print("[Hozir] не запустился:", _safe(e))
+            print("[Ishda] не запустился:", _safe(e))
 
     def reload_faces():
         """Перечитать папку photos без перезапуска (свои детектор/распознаватель - основные заняты)."""
@@ -1509,8 +1509,8 @@ def main():
         if new:
             faces_db["db"] = new
             EMPLOYEES[:] = sorted(new, key=str.lower)
-            if hozir:
-                hozir.set_db(new)
+            if ishda:
+                ishda.set_db(new)
         return {"employees": {n: len(f) for n, f in new.items()}, "issues": dict(PHOTO_ISSUES)}
 
     def restart():
@@ -1565,7 +1565,7 @@ def main():
                 "online": r.last_frame > 0 and now_ts - r.last_frame < 10,
                 "door_fps": round(door_workers[r.name].fps, 1) if r.name in door_workers else None,
             } for r in readers],
-            "hozir": hozir.status() if hozir else None,
+            "ishda": ishda.status() if ishda else None,
         }
 
     reports_url = ""
@@ -1657,8 +1657,8 @@ def main():
                 if w0 > MAX_FRAME_WIDTH:
                     k = MAX_FRAME_WIDTH / w0
                     frame = cv2.resize(frame, (MAX_FRAME_WIDTH, int(h0 * k)))
-                if hozir:
-                    hozir.feed(r.name, frame.copy() if SHOW_WINDOW else frame)   # окно рисует рамки поверх
+                if ishda:
+                    ishda.feed(r.name, frame.copy() if SHOW_WINDOW else frame)   # окно рисует рамки поверх
 
                 door = doors.get(r.name)
 
