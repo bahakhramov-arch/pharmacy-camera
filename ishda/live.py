@@ -52,6 +52,7 @@ class IshdaLive:
         self.presence = Presence(float(env("LEAVE_MIN", "20")))
         self.day = dt.date.today()
         self._recover()
+        self.unknown = {}       # камера -> [(минут за прилавком, рамка)] неузнанные дольше 10 минут
         self.latest = {}
         self.lock = threading.Lock()
         self.ms = 0.0
@@ -111,6 +112,10 @@ class IshdaLive:
                 pipe = self.cams[cam]
                 _, res = pipe.step(frame, t0)
                 h = frame.shape[0]
+                # долго стоит за прилавком, а имени нет - скорее всего сотрудник без хороших фото
+                self.unknown[cam] = [(round((t0 - tr.first_t) / 60), [int(v) for v in tr.box])
+                                     for tr, name, _ in res
+                                     if not name and t0 - tr.first_t > 600 and not pipe.tracker.is_static(tr)]
                 for tr, name, _ in res:
                     if not name:
                         continue
@@ -140,5 +145,6 @@ class IshdaLive:
 
     def status(self):
         return {"present": self.presence.present(), "ms_per_round": round(self.ms),
+                "unknown": {cam: v for cam, v in self.unknown.items() if v},
                 "events": [(dt.datetime.fromtimestamp(t).strftime("%H:%M:%S"), n, k)
                            for t, n, k in self.presence.events[-30:]]}

@@ -33,6 +33,11 @@ CONFIG_KEYS = {
     "STRICT_THRESHOLD": "Порог для тех, у кого только обычное фото (0 = как все)",
     "PERSON_THRESHOLDS": "Личные пороги: Имя:0.46,Имя2:0.44",
     "MIN_ID_FACE_SCORE": "Мин. уверенность «это лицо» (отсекает руки, 0 = выкл.)",
+    "ISHDA": "Ishda AI в теневом режиме (1/0)",
+    "ISHDA_ZONES": "Ishda: зоны поиска людей, напр. 6:0.42,0,1,0.7",
+    "ISHDA_MIN_BOTTOM": "Ishda: низ фигуры ниже линии, напр. 5:0.55",
+    "ISHDA_FPS": "Ishda: кадров в секунду на камеру",
+    "ISHDA_LEAVE_MIN": "Ishda: «ушёл», если фигуры нет N минут",
 }
 SECRET_KEYS = ("BOT_TOKEN", "NVR_PASSWORD", "REPORTS_PASSWORD", "PANEL_PASSWORD")
 
