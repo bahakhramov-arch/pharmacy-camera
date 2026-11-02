@@ -6,7 +6,6 @@
 """
 
 import numpy as np
-from scipy.optimize import linear_sum_assignment
 
 
 def iou(a, b):
@@ -81,13 +80,17 @@ class Tracker:
             p = tr.predict(t)
             for j, d in enumerate(dets):
                 cost[i, j] = 1.0 - iou(p, d[:4])
-        rows, cols = linear_sum_assignment(cost)
+        # жадно: сначала самые перекрывающиеся пары (людей в кадре мало - этого достаточно)
         pairs, used_t, used_d = [], set(), set()
-        for i, j in zip(rows, cols):
-            if 1.0 - cost[i, j] >= thr:
-                pairs.append((i, j))
-                used_t.add(i)
-                used_d.add(j)
+        for k in np.argsort(cost, axis=None):
+            i, j = divmod(int(k), cost.shape[1])
+            if 1.0 - cost[i, j] < thr:
+                break
+            if i in used_t or j in used_d:
+                continue
+            pairs.append((i, j))
+            used_t.add(i)
+            used_d.add(j)
         return (pairs, [i for i in range(len(tracks)) if i not in used_t],
                 [j for j in range(len(dets)) if j not in used_d])
 
