@@ -144,7 +144,11 @@ const VIEWS = {
             <div><div class="muted small">Камеры</div><b style="font-size:22px" class="${online === cams.length ? "ok" : "bad"}">${online}/${cams.length}</b></div>
             <div><div class="muted small">На месте</div><b style="font-size:22px">${(d.staff_present || []).length}</b></div>
           </div>
-          <table>${staff || '<tr><td class="muted">Сегодня отметок нет</td></tr>'}</table>`;
+          <table>${staff || '<tr><td class="muted">Сегодня отметок нет</td></tr>'}</table>
+          ${sys.hozir ? `<div class="small" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+            <b>Hozir</b> <span class="muted">(новая система, тестовый режим)</span>: на месте —
+            ${sys.hozir.present.length ? sys.hozir.present.map(esc).join(", ") : "никого"}
+            <div class="muted">${sys.hozir.events.slice(-4).reverse().map((e) => `${e[0]} ${esc(e[1])} ${e[2]}`).join(" · ")}</div></div>` : ""}`;
       }).catch((e) => { el.innerHTML = `<h3>${esc(b.name)} <span class="badge bad">не отвечает</span></h3><div class="small bad">${esc(e.message)}</div>`; });
     }
   },
