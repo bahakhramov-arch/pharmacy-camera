@@ -146,7 +146,7 @@ const VIEWS = {
           </div>
           <table>${staff || '<tr><td class="muted">Сегодня отметок нет</td></tr>'}</table>
           ${sys.ishda ? `<div class="small" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-            <b>Ishda AI</b> <span class="muted">(новая система, тестовый режим)</span>: на месте —
+            <b>Ishda AI</b> <span class="muted">(${sys.ishda.mode === "primary" ? "ведёт учёт" : "тестовый режим"})</span>: на месте —
             ${sys.ishda.present.length ? sys.ishda.present.map(esc).join(", ") : "никого"}
             <div class="muted">${sys.ishda.events.slice(-4).reverse().map((e) => `${e[0]} ${esc(e[1])} ${e[2]}`).join(" · ")}</div>
             ${Object.entries(sys.ishda.unknown || {}).map(([cam, v]) => `<div class="warn">⚠ ${esc(cam)}: за прилавком неузнанный человек ${v.map((x) => x[0] + " мин").join(", ")} — добавьте фото сотрудника</div>`).join("")}</div>` : ""}`;

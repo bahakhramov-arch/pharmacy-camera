@@ -52,12 +52,15 @@ class IshdaLive:
         self.presence = Presence(float(env("LEAVE_MIN", "20")))
         self.day = dt.date.today()
         self._recover()
+        self.mode = "shadow"    # shadow - только свой журнал; primary - ведёт учёт
+        self.on_event = None    # основная система: (имя, приход/уход, datetime)
+        self.on_seen = None     # (имя, datetime) - кого видно сейчас
         self.unknown = {}       # камера -> [(минут за прилавком, рамка)] неузнанные дольше 10 минут
         self.latest = {}
         self.lock = threading.Lock()
         self.ms = 0.0
         threading.Thread(target=self._run, daemon=True, name="ishda").start()
-        print(f"[Ishda] теневой режим: камеры {', '.join(self.cams)}")
+        print(f"[Ishda] запущен: камеры {', '.join(self.cams)}")
 
     def _recover(self):
         """После перезапуска программы: кто по журналу Ishda сейчас на работе - тот на месте
@@ -86,8 +89,15 @@ class IshdaLive:
             when = dt.datetime.fromtimestamp(t_last)
             print(f"[Ishda] {name}: уход в {when:%H:%M:%S} (конец дня)")
             self._log(when, name, "уход")
+            self._emit(name, "уход", when)
         self.presence.state.clear()
         self.day = dt.date.fromtimestamp(now)
+
+    def attach(self, on_event, on_seen):
+        """Ishda - основная система: события уходят в программу учёта (журнал, бот, итоги)."""
+        self.on_seen = on_seen
+        self.on_event = on_event
+        self.mode = "primary"
 
     def set_db(self, db):
         for p in self.cams.values():
@@ -126,14 +136,26 @@ class IshdaLive:
             day_start = dt.datetime.combine(self.day, dt.time()).timestamp()
             named = {n: max(t_first, day_start) for n, t_first in named.items()}   # трек со вчера
             # треки, которые сейчас не в кадре, но не «умерли», не учитываются - уход по таймауту
+            if self.on_seen:
+                now_dt = dt.datetime.fromtimestamp(t0)
+                for name in named:
+                    self.on_seen(name, now_dt)
             for t_ev, name, kind in self.presence.update(t0, named):
                 when = dt.datetime.fromtimestamp(t_ev)
                 print(f"[Ishda] {name}: {kind} в {when:%H:%M:%S}")
                 self._log(when, name, kind)
+                self._emit(name, kind, when)
             spent = time.time() - t0
             if frames:                      # среднее время обработки кадров одного круга
                 self.ms = 0.9 * self.ms + 0.1 * spent * 1000 if self.ms else spent * 1000
             time.sleep(max(0.0, period - spent))
+
+    def _emit(self, name, kind, when):
+        if self.on_event:
+            try:
+                self.on_event(name, kind, when)
+            except Exception as e:          # ошибка в учёте не должна останавливать Ishda
+                print("[Ishda] ошибка передачи события:", e)
 
     def _log(self, when, name, kind):
         new = not os.path.exists(EVENTS_FILE)
@@ -144,7 +166,7 @@ class IshdaLive:
             w.writerow([when.date().isoformat(), when.strftime("%H:%M:%S"), name, self.branch, kind])
 
     def status(self):
-        return {"present": self.presence.present(), "ms_per_round": round(self.ms),
+        return {"present": self.presence.present(), "ms_per_round": round(self.ms), "mode": self.mode,
                 "unknown": {cam: v for cam, v in self.unknown.items() if v},
                 "events": [(dt.datetime.fromtimestamp(t).strftime("%H:%M:%S"), n, k)
                            for t, n, k in self.presence.events[-30:]]}

@@ -869,6 +869,9 @@ class Attendance:
             self.shift_arrived[name] = ws
             late = self._late(name, now) if first else 0
             self.log_event(now, name, "приход", late)
+        self._announce(name, now, first, late, off_schedule)
+
+    def _announce(self, name, now, first, late, off_schedule=None):
         t = now.strftime("%H:%M")
         if first:
             text = (f"⚠️ {name}, филиал {BRANCH}, пришёл(ла) в {t} (опоздание {late} мин)"
@@ -882,6 +885,36 @@ class Attendance:
             send_telegram(text)
         if first and STAFF_CHAT_IDS:
             send_telegram(f"✅ {name} пришёл(ла) в {t}", to=STAFF_CHAT_IDS)
+
+    # --- Ishda AI - основная система: приход и уход приходят от неё (по фигурам, не по лицам)
+    def ishda_event(self, name, kind, when):
+        if kind == "уход":
+            with self.lock:
+                here = name in self.present
+            if here:
+                self._depart(name, when)
+            return
+        if not settings.branch_open(when):          # аптека закрыта - ночью приходов нет
+            print(f"[Ishda] {name}: {when:%H:%M} - аптека закрыта, приход не засчитан")
+            return
+        with self.lock:
+            self.last_seen[name] = max(self.last_seen.get(name, when), dt.datetime.now())
+            if name in self.present:
+                return
+            off = None if settings.arrival_allowed(name, when) else "{}–{}".format(*settings.shift_range(name))
+            ws = settings.window_start(name, when)
+            first = self.shift_arrived.get(name) != ws
+            self.present.add(name)
+            self.shift_arrived[name] = ws
+            late = self._late(name, when) if first else 0
+            self.log_event(when, name, "приход", late)
+        self._announce(name, when, first, late, off)
+
+    def ishda_touch(self, name, now):
+        """Ishda видит человека сейчас - для «отработано» и итогов смены."""
+        with self.lock:
+            if name in self.present:
+                self.last_seen[name] = now
 
     def _depart(self, name, when):
         with self.lock:
@@ -1493,7 +1526,9 @@ def main():
     EMPLOYEES[:] = sorted(db, key=str.lower)
     faces_db = {"db": db}      # панель управления заменяет словарь целиком (перезагрузка фото)
     ishda = None
-    if os.environ.get("ISHDA", os.environ.get("HOZIR", "")).strip() == "1":   # Ishda AI, теневой режим
+    ishda_mode = os.environ.get("ISHDA", os.environ.get("HOZIR", "")).strip().lower()
+    ishda_primary = ishda_mode == "primary"          # Ishda ведёт учёт, старое распознавание выключено
+    if ishda_mode in ("1", "primary"):               # «1» - теневой режим (только свой журнал)
         try:
             from ishda.live import IshdaLive
             ishda = IshdaLive(db, BRANCH, STAFF_CHANNELS, camera_label)
@@ -1523,6 +1558,12 @@ def main():
 
     outage_text = check_outage()
     att = Attendance()
+    if ishda and ishda_primary:
+        ishda.attach(att.ishda_event, att.ishda_touch)
+        print("[Ishda] основная система: приходы и уходы - от Ishda AI")
+    elif ishda_primary:
+        print("[Ishda] не запустился - учёт ведёт старая система")
+        ishda_primary = False
     visitors = VisitorLog(VISITORS_FILE, BRANCH)
     n_in, n_out = visitors.restore_today(DAY_START_HOUR)
     if n_in or n_out:
@@ -1639,7 +1680,8 @@ def main():
 
             if time.time() - last_tick >= 1:
                 last_tick = time.time()
-                att.check_departures(now)
+                if not ishda_primary:            # у Ishda свой уход - по фигурам
+                    att.check_departures(now)
                 check_schedule(att, visitors, now, sent)
                 att.save_state()
 
@@ -1662,7 +1704,9 @@ def main():
 
                 door = doors.get(r.name)
 
-                if time.time() - last_proc[r.name] >= DETECT_INTERVAL_SEC:
+                # с Ishda лица на камерах сотрудников старой системе не нужны (только у двери - метить персонал)
+                if (time.time() - last_proc[r.name] >= DETECT_INTERVAL_SEC
+                        and not (ishda_primary and not door)):
                     last_proc[r.name] = time.time()
                     deep = time.time() - last_thorough[r.name] >= 1.5
                     if deep:
